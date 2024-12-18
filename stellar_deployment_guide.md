@@ -542,5 +542,5 @@ stellar network add \
 --rpc-url https://soroban-testnet.stellar.org:443 \
 --network-passphrase "Test SDF Network ; September 2015"
 ```
-4. When you build a contract and get an error like `can't find crate for 'core'` it means you didn't install the wasm32 target during the setup step. You can do it so by running `rustup target add wasm32-unknown-unknown`.
+
 
