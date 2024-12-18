@@ -2,12 +2,12 @@
 
 Mark with an `x` all the checkboxes that apply (like `[x]`)
 
-- [] Closes #
-- [] Added tests (if necessary)
-- [] Run tests
-- [] Run formatting
-- [] Evidence attached
-- [] Commented the code
+- [ ] Closes #
+- [ ] Added tests (if necessary)
+- [ ] Run tests
+- [ ] Run formatting
+- [ ] Evidence attached
+- [ ] Commented the code
 
 ---
 
