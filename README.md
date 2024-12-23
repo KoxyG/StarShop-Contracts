@@ -47,7 +47,7 @@ Install the target: Install the `wasm32-unknown-unknown` target.
 rustup target add wasm32-unknown-unknown 
 ```
 
-### 1. Editor Configuration
+#### 1. Editor Configuration
 Many editors support Rust. For more on how to configure your editor: https://www.rust-lang.org/tools 
 
 - [Visual Studio Code](https://code.visualstudio.com/) editor (A very popular code editor) 
@@ -55,7 +55,7 @@ Many editors support Rust. For more on how to configure your editor: https://www
 - [CodeLLDB](https://marketplace.visualstudio.com/items?itemName=vadimcn.vscode-lldb) for step-through-debugging 
 
 
-### 2. Stellar CLI Installation
+#### 2. Stellar CLI Installation
 There are a few ways to install the [latest release](https://github.com/stellar/stellar-cli/releases) of Stellar CLI. 
 
 Install with Homebrew (macOS, Linux)
@@ -75,7 +75,7 @@ cargo install --locked stellar-cli@22.0.1 --features opt
 ```
 Autocompletion for macOS/Linux: You can use `stellar completion` to generate shell completion.
 
-### 3. Autocompletion
+#### 3. Autocompletion
 To enable autocomplete on the current shell session:
 
 `Bash`
@@ -93,7 +93,7 @@ echo "source <(stellar completion --shell bash)" >> ~/.bashrc
 
 ### Windows Installation
 
-### Windows Rust Installation :building_construction:
+#### Windows Rust Installation :building_construction:
 On Windows, download and run [rustup-init.exe](https://static.rust-lang.org/rustup/dist/i686-pc-windows-gnu/rustup-init.exe) 🔗 You can continue with the default settings by pressing Enter.
 
 > NOTE 🔢 It is recommended to use the Windows Terminal. See how to install [Windows Terminal ](https://learn.microsoft.com/en-us/windows/terminal/install) 🔗
@@ -105,7 +105,7 @@ Install the target: Install the `wasm32-unknown-unknown` target.
 rustup target add wasm32-unknown-unknown 🚀
 ```
 
-### 1. Editor Configuration 🏗️
+#### 1. Editor Configuration 🏗️
 Many editors have support for Rust. Visit the following link to find out how to configure your editor:
 https://www.rust-lang.org/tools 🔗
 
@@ -113,7 +113,7 @@ https://www.rust-lang.org/tools 🔗
 - [Rust Analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer) for Rust language support 🔗
 - [CodeLLDB](https://marketplace.visualstudio.com/items?itemName=vadimcn.vscode-lldb) for step-through-debugging 🔗
 
-### 2. Stellar CLI Installation 🏗️
+#### 2. Stellar CLI Installation 🏗️
 There are a three ways to install the [latest release](https://github.com/stellar/stellar-cli/releases) of Stellar CLI. 🔗
 
 Using the installer:
@@ -175,6 +175,7 @@ stellar keys generate --global alice --network testnet --fund 🚀
 ```
 stellar keys address alice  🚀
 ```
+---
 
 ## Compilation
 Create a New Project: `soroban-hello-world` project
@@ -388,7 +389,7 @@ Output:
 ```
 ---
 
-# Testing and Execution
+## Testing and Execution
 Writing tests for Soroban contracts involves writing Rust code using the test facilities and toolchain that you'd use for testing any Rust code.
 
 Given our HelloContract, a simple test will look like this.
@@ -465,7 +466,7 @@ stellar contract optimize --wasm target/wasm32-unknown-unknown/release/hello_wor
 This will optimize and output a new hello_world.optimized.wasm file in the same location as the input .wasm.
 
 
-# Troubleshooting
+## Troubleshooting
 1. If you encounter an XDR error during deployment, try these steps 
 - Ensure your account has sufficient funds
 - Double-check the WASM hash
