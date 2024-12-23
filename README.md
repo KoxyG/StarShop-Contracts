@@ -1,4 +1,4 @@
-<h1 align="center"> Revo Contracts</h1>
+<h1 align="center"> StarShop Contracts</h1>
 
 <h3 align="center"> 🛠️ Maintainer</h3>
 <table align="center">
