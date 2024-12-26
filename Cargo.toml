@@ -1,0 +1,7 @@
+[workspace]
+members = [
+    "StarShopContracts/Test",
+]
+
+[workspace.dependencies]
+soroban-sdk = "22.0.0-rc.3.2"
