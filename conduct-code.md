@@ -32,3 +32,13 @@ By participating in this project, you agree to uphold this Code of Conduct and h
 - Comply with all local laws and regulations when contributing to Starshop.
 
 ---
+
+## Unacceptable Behavior
+Unacceptable behavior includes, but is not limited to:
+- Harassment, threats, or intimidation of any kind.
+- Discriminatory remarks based on race, ethnicity, gender, sexual orientation, disability, or any other protected characteristic.
+- Offensive or inappropriate comments, imagery, or jokes.
+- Excessive or careless use of AI that compromises the quality, originality, or integrity of contributions.
+- Disruptive or harmful actions that undermine the project or its participants.
+
+---
