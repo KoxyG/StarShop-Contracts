@@ -45,7 +45,7 @@ Unacceptable behavior includes, but is not limited to:
 
 ## Reporting Issues
 If you experience or witness behavior that violates this Code of Conduct, please report it immediately. Reports can be submitted to:
-- **[Contact Email Address]**
+- **starshopcr@gmail.com**
 - **[Other Reporting Channels, e.g., anonymous forms or moderators]**
 
 All reports will be handled with discretion. Retaliation against individuals who report issues is prohibited.
