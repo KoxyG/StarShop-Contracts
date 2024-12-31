@@ -42,3 +42,15 @@ Unacceptable behavior includes, but is not limited to:
 - Disruptive or harmful actions that undermine the project or its participants.
 
 ---
+
+## Reporting Issues
+If you experience or witness behavior that violates this Code of Conduct, please report it immediately. Reports can be submitted to:
+- **[Contact Email Address]**
+- **[Other Reporting Channels, e.g., anonymous forms or moderators]**
+
+All reports will be handled with discretion. Retaliation against individuals who report issues is prohibited.
+
+---
+
+## Attribution
+This Code of Conduct is inspired by and adapted from the [Contributor Covenant Code of Conduct](https://www.contributor-covenant.org/), version 2.1.
