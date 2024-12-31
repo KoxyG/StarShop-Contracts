@@ -23,3 +23,12 @@ By participating in this project, you agree to uphold this Code of Conduct and h
    Ensure that Starshop is a safe environment for all participants, regardless of their background or identity.
 
 ---
+## Expected Behavior
+- Use inclusive language and be considerate of different perspectives.
+- Be patient and supportive when working with others.
+- Provide constructive feedback, avoiding personal attacks or demeaning language.
+- Respect differing opinions and resolve disagreements constructively.
+- Use AI tools responsibly—AI is encouraged, but always ensure your contributions are understandable, transparent, and maintainable.
+- Comply with all local laws and regulations when contributing to Starshop.
+
+---
