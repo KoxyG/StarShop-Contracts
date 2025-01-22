@@ -1,6 +1,11 @@
 [workspace]
 members = [
-    "StarShopContracts/Test",
+    "StarShopContracts/ExampleContract",
+    "StarShopContracts/ImplementNFTContract,
+    "StarShopContracts/ImplementPaymentContract",
+    "StarShopContracts/ProductFollowContract",
+    "StarShopContracts/ProductVotingContract",
+    
 ]
 
 [workspace.dependencies]
