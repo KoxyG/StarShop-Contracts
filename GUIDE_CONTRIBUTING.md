@@ -103,7 +103,7 @@ We welcome contributions from the community! Here's how you can help:
 4. Use grouping tokens (words) at the beginning of your branch names (in a similar way to the `type` of commit).
 5. Define and use short lead tokens to differentiate branches in a way that is meaningful to your workflow.
 6. Use slashes to separate parts of your branch names.
-7. Remove your branch after merging it if it is not important
+7. Remove your branch after merging it if it is not important.
 
 **Examples:**
 
