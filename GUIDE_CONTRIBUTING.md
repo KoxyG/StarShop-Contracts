@@ -96,7 +96,7 @@ We welcome contributions from the community! Here's how you can help:
 
 ---
 
-# **🔗 Branches**
+## **🔗 Branches**
 1. There must be a `main` branch, used only for the releases.
 2. Avoid long descriptive names for long-lived branches.
 3. Use kebab-case (no CamelCase).
