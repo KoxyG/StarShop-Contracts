@@ -48,10 +48,12 @@ We welcome contributions from the community! Here's how you can help:
 
 4. **Commit:** Commit your changes.
 
-    1. **git add (file-name) / git add .**
-    2. **git commit -m "[type] description"**
+    1. git add (file-name) / git add .
+    2. git commit -m "[type] description"
 
-    - Example: 
+
+    - **Example:**
+ 
     ```
     git add ImplementContract
     ```
@@ -90,6 +92,7 @@ We welcome contributions from the community! Here's how you can help:
     ```
 3. **Untracked files causing conflict.**
     - Delete them if you don't need them
+  
     ```bash
     rm filename
     ```
