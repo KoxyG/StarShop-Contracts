@@ -1,7 +1,7 @@
 [workspace]
 members = [
     "StarShopContracts/ExampleContract",
-    "StarShopContracts/ImplementNFTContract,
+    "StarShopContracts/ImplementNFTContract",
     "StarShopContracts/ImplementPaymentContract",
     "StarShopContracts/ProductFollowContract",
     "StarShopContracts/ProductVotingContract",
