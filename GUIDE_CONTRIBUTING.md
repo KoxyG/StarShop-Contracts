@@ -1,9 +1,5 @@
 <h1 align="center"> Contributing StarShop Contracts</h1>
 
-<div align="center">
-  <img src="public/starshop-logos/StarShop-Logo.svg" height="200">
-</div>
-
 # 📝 Table of Contents
  
 1. 🚀 [Introduction](#introduction)
