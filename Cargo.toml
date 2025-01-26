@@ -1,12 +1,27 @@
 [workspace]
 members = [
-    "StarShopContracts/ExampleContract",
-    "StarShopContracts/ImplementNFTContract,
-    "StarShopContracts/ImplementPaymentContract",
-    "StarShopContracts/ProductFollowContract",
-    "StarShopContracts/ProductVotingContract",
+    "StarShopContracts/example-contract",
+    "StarShopContracts/implement-nft-contract",
+    "StarShopContracts/implement-payment-contract",
+    "StarShopContracts/product-follow-contract",
+    "StarShopContracts/product-voting-contract",
     
 ]
 
 [workspace.dependencies]
 soroban-sdk = "22.0.0-rc.3.2"
+
+[profile.release]
+opt-level = "z"
+overflow-checks = true
+debug = 0
+strip = "symbols"
+debug-assertions = false
+panic = "abort"
+codegen-units = 1
+lto = true
+
+# For more information about this profile see https://soroban.stellar.org/docs/basic-tutorials/logging#cargotoml-profile
+[profile.release-with-logs]
+inherits = "release"
+debug-assertions = true
