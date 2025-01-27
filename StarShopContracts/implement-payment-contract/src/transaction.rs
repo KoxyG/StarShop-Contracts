@@ -9,7 +9,7 @@ pub struct TransactionContract
 #[contractimpl]
 impl TransactionContract {
 
-  pub fn payment_transaction (e: Env, signer: Address, to: Address, amount_to_deposit: i128) -> Result<(), RefundError> {
+  pub fn payment_transaction (e: Env, signer: Address, to: Address, amount_to_deposit: i128) -> Result<(), TransactionError> {
     signer.require_auth();
 
     // xml token id
@@ -21,7 +21,12 @@ impl TransactionContract {
     // Get the signer's balance
     let signer_balance = xlm_client.balance(&signer);
 
-    let contract_address = e.current_contract_address();
+    if signer_balance < amount_to_deposit {
+       return Err(TransactionError::InsufficientFunds);
+    }
+
+
+   //  let contract_address = e.current_contract_address();
 
     // Transfer XLM from signer to contract
     xlm_client.transfer(&signer, &to, &amount_to_deposit);
@@ -34,7 +39,7 @@ impl TransactionContract {
 
 
 #[derive(Debug)]
-pub enum RefundError {
+pub enum TransactionError {
     InsufficientFunds,
 }
 

@@ -21,17 +21,17 @@ impl DisputeContract {
 
     let xlm_token_id = TokenIdentifier::native();
     let xlm_client = TokenClient::new(&e, &xlm_token_id);
-    let contract_address = e.current_contract_address();
+
+
+    // let contract_address = e.current_contract_address();
 
 
     let arbitrator_balance = xlm_client.balance(&arbitrator);
         if arbitrator_balance < refund_amount {
             return Err(ContractError::InsufficientFunds);
         }
-
-   //  let contract_address = e.current_contract_address();
-
-    // Transfer XLM from signer to contract
+        
+    // Transfer XLM base on decision. 
    match decision {
             DisputeDecision::RefundToBuyer => {
                 xlm_client.transfer(&arbitrator, &buyer, &refund_amount);

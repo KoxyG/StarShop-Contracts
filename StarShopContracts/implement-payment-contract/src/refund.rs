@@ -16,7 +16,11 @@ impl RefundContract {
 
     let xlm_client = TokenClient::new(&e, &xml_token_id);
 
-    let signer_balance = xlm_client.balance(&signer);
+    let seller_balance = xlm_client.balance(&seller);
+
+    if seller_balance < amount {
+       return Err(RefundError::InsufficientFunds);
+    }
 
     // let contract_address = e.current_contract_address();
 
