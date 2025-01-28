@@ -25,7 +25,9 @@ impl RefundContract {
     // let contract_address = e.current_contract_address();
 
     // Transfer XLM from seller to  buyer
-    xlm_client.transfer(&seller, &buyer, &amount);
+   if xlm_client.transfer(&seller, &buyer, &amount).is_err() {
+      return Err(RefundError::TransferFailed);
+   };
 
     Ok()
 
@@ -37,5 +39,6 @@ impl RefundContract {
 #[derive(Debug)]
 pub enum RefundError {
     InsufficientFunds,
+    TransferFailed,
 }
 
