@@ -1,7 +1,8 @@
-use soroban_sdk::{contracterror, Address, Map, Symbol};
+use soroban_sdk::{contracterror, contracttype, Address, Map, Symbol};
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 #[repr(u32)]
+#[contracttype]
 pub enum VoteType {
     Upvote = 1,
     Downvote = 2,
@@ -20,6 +21,8 @@ pub enum Error {
     ProductExists = 7,
 }
 
+#[derive(Clone)]
+#[contracttype]
 pub struct Product {
     pub id: Symbol,
     pub name: Symbol,
@@ -27,6 +30,8 @@ pub struct Product {
     pub votes: Map<Address, Vote>,
 }
 
+#[derive(Clone)]
+#[contracttype]
 pub struct Vote {
     pub vote_type: VoteType,
     pub timestamp: u64,

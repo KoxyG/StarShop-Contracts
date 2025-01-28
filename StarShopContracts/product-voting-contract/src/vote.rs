@@ -12,12 +12,12 @@ impl VoteManager {
     pub fn create_product(env: &Env, id: Symbol, name: Symbol) -> Result<(), Error> {
         let mut products: Map<Symbol, Product> = env.storage().instance().get(&symbol_short!("products")).unwrap();
         
-        if products.contains_key(id) {
+        if products.contains_key(id.clone()) {
             return Err(Error::ProductExists);
         }
 
         let product = Product {
-            id,
+            id: id.clone(),
             name,
             created_at: env.ledger().timestamp(),
             votes: Map::new(env),
@@ -36,7 +36,7 @@ impl VoteManager {
     ) -> Result<(), Error> {
         let mut products: Map<Symbol, Product> = env.storage().instance().get(&symbol_short!("products")).unwrap();
         
-        let mut product = products.get(product_id)
+        let mut product = products.get(product_id.clone())
             .ok_or(Error::ProductNotFound)?;
             
         let now = env.ledger().timestamp();

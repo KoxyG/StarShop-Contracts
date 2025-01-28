@@ -13,7 +13,7 @@ impl RankingCalculator {
     }
 
     pub fn update_ranking(env: &Env, product_id: Symbol) {
-        let score = Self::calculate_score(env, product_id);
+        let score = Self::calculate_score(env, product_id.clone());
         
         let mut rankings: Map<Symbol, i32> = env.storage().instance().get(&symbol_short!("rankings")).unwrap();
         rankings.set(product_id, score);
@@ -27,20 +27,29 @@ impl RankingCalculator {
 
     pub fn get_trending(env: &Env) -> Vec<Symbol> {
         let rankings: Map<Symbol, i32> = env.storage().instance().get(&symbol_short!("rankings")).unwrap();
-        let mut products: Vec<(Symbol, i32)> = Vec::new(env);
+        let mut result = Vec::new(env);
 
-        // Convert map to vec for sorting
+        // Convert to vector of tuples
+        let mut pairs = Vec::new(env);
         for (id, score) in rankings.iter() {
-            products.push_back((id, score));
+            pairs.push_back((id, score));
         }
 
-        // Sort by score
-        products.sort_by(|a, b| b.1.cmp(&a.1));
+        // Manual sorting since Soroban Vec doesn't have sort_by
+        let n = pairs.len();
+        for i in 0..n {
+            for j in 0..(n - i - 1) {
+                if pairs.get(j).unwrap().1 < pairs.get(j + 1).unwrap().1 {
+                    let temp = pairs.get(j).unwrap();
+                    pairs.set(j, pairs.get(j + 1).unwrap());
+                    pairs.set(j + 1, temp);
+                }
+            }
+        }
 
-        // Return only product IDs
-        let mut result = Vec::new(env);
-        for (id, _) in products.iter() {
-            result.push_back(*id);
+        // Extract only the IDs
+        for pair in pairs.iter() {
+            result.push_back(pair.0);
         }
 
         result
@@ -55,7 +64,9 @@ impl RankingCalculator {
 
         // Calculate base score from votes
         let mut base_score = 0i32;
-        for vote in product.votes.values() {
+        let votes = product.votes.values();
+        for i in 0..votes.len() {
+            let vote = votes.get(i).unwrap();
             match vote.vote_type {
                 VoteType::Upvote => base_score += 1,
                 VoteType::Downvote => base_score -= 1,
@@ -63,9 +74,13 @@ impl RankingCalculator {
         }
 
         // Count recent votes for trending factor
-        let recent_votes = product.votes.values()
-            .filter(|vote| now - vote.timestamp <= TRENDING_WINDOW)
-            .count() as i32;
+        let mut recent_votes = 0;
+        for i in 0..votes.len() {
+            let vote = votes.get(i).unwrap();
+            if now - vote.timestamp <= TRENDING_WINDOW {
+                recent_votes += 1;
+            }
+        }
 
         // Apply time decay and add trending bonus
         base_score / (1 + (age_hours / 24) as i32) + (recent_votes / 2)
