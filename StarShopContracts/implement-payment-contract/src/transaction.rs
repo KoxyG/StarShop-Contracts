@@ -12,6 +12,11 @@ impl TransactionContract {
   pub fn payment_transaction (e: Env, signer: Address, to: Address, amount_to_deposit: i128) -> Result<(), TransactionError> {
     signer.require_auth();
 
+    // check for invalid amount
+    if amount_to_deposit <= 0 {
+        return Err(TransactionError::InvalidAmount);
+    }
+
     // xml token id
     let xml_token_id = TokenIdentifier::native();
 
@@ -25,11 +30,17 @@ impl TransactionContract {
        return Err(TransactionError::InsufficientFunds);
     }
 
+    // Ensure the signer is authorized to send funds
+    if signer == to {
+        return Err(TransactionError::UnauthorizedAccess);
+    }
 
    //  let contract_address = e.current_contract_address();
 
     // Transfer XLM from signer to contract
-    xlm_client.transfer(&signer, &to, &amount_to_deposit);
+   if xlm_client.transfer(&signer, &to, &amount_to_deposit).is_err() {
+      return Err(TransactionError::TransferFailed);
+   };
 
     Ok()
 
@@ -41,5 +52,8 @@ impl TransactionContract {
 #[derive(Debug)]
 pub enum TransactionError {
     InsufficientFunds,
+    InvalidAmount,
+    UnauthorizedAccess,
+    TransferFailed
 }
 
