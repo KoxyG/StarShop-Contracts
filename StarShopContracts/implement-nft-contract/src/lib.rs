@@ -1,77 +1,66 @@
-#![no_std]
-use soroban_sdk::{contract, contracterror, contractimpl, contracttype, Address, Env, String};
+use soroban_sdk::{
+    contract, contractimpl, contracttype, symbol_short, Symbol, Address, Env, String,
+};
 
 mod minting;
 mod distribution;
 mod metadata;
 
-#[contract]
-pub struct Contract;
+pub use minting::*;
+pub use distribution::*;
+pub use metadata::*;
 
-#[contracttype]
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct Metadata {
-    pub purchase_details: String,
-    pub reward_reason: String,
-}
+const METADATA_KEY: Symbol = symbol_short!("METADATA");
+const COUNTER: Symbol = symbol_short!("COUNTER");
 
-#[contracttype]
 #[derive(Clone)]
-enum DataKey {
-    Admin,        // Almacena la dirección del admin
-    NextId,       // Contador para IDs de NFTs
-    Owner(u64),   // Dueño de cada NFT por ID
-    Metadata(u64), // Metadatos asociados a cada NFT
+#[contracttype]
+pub struct NFTMetadata {
+    pub name: String,
+    pub symbol: String,
 }
 
-#[contracterror]
-#[repr(u32)]
-pub enum Error {
-    Unauthorized = 1,
-    NotOwner = 2,
-    NotFound = 3,
+#[derive(Clone)]
+#[contracttype]
+pub enum DataKey {
+    Admin,
 }
+
+#[contract]
+pub struct NFTContract;
 
 #[contractimpl]
-impl Contract {
-    // Función de inicialización (ya existente)
-    pub fn initialize(env: Env, admin: Address) {
-        env.storage().set(&DataKey::Admin, &admin);
-        env.storage().set(&DataKey::NextId, &0);
+impl NFTContract {
+    pub fn initialize(env: Env, admin: Address, name: String, symbol: String) {
+        if has_administrator(env.clone()) {
+            panic!("Contract already initialized")
+        }
+
+        let metadata = NFTMetadata { name, symbol };
+        env.storage().instance().set(&DataKey::Admin, &admin);
+        env.storage().persistent().set(&METADATA_KEY, &metadata);
     }
-    
-    // Función de Minting (conecta con minting.rs)
-    pub fn mint(env: Env, metadata: Metadata) -> Result<(), Error> {
-        // Verifica que solo el admin pueda mintear
-        let admin = env.storage().get(&DataKey::Admin)?.ok_or(Error::Unauthorized)?;
-        admin.require_auth();
-        
-        minting::mint(env, metadata)
+
+    // Helper functions
+    pub fn read_administrator(env: Env) -> Address {
+        env.storage().instance().get(&DataKey::Admin).unwrap()
     }
-    
-    // Función de Distribución (conecta con distribution.rs)
-    pub fn distribute(env: Env, to: Address, token_id: u64) -> Result<(), Error> {
-        // Solo el admin puede distribuir
-        let admin = env.storage().get(&DataKey::Admin)?.ok_or(Error::Unauthorized)?;
-        admin.require_auth();
-        
-        distribution::distribute(env, to, token_id)
+
+    pub fn name(env: Env) -> String {
+        let metadata: NFTMetadata = env.storage().persistent().get(&METADATA_KEY).unwrap();
+        metadata.name
     }
-    
-    // Obtener metadatos (conecta con metadata.rs)
-    pub fn get_metadata(env: Env, token_id: u64) -> Result<Metadata, Error> {
-        metadata::get(env, token_id)
-    }
-    
-    // Obtener dueño de un NFT
-    pub fn get_owner(env: Env, token_id: u64) -> Result<Address, Error> {
-        env.storage()
-            .get(&DataKey::Owner(token_id))?
-            .ok_or(Error::NotFound)
-    }
-    
-    // Obtener próximo ID disponible (útil para frontend)
-    pub fn next_id(env: Env) -> Result<u64, Error> {
-        Ok(env.storage().get(&DataKey::NextId)?.unwrap_or(0))
+
+    pub fn symbol(env: Env) -> String {
+        let metadata: NFTMetadata = env.storage().persistent().get(&METADATA_KEY).unwrap();
+        metadata.symbol
     }
 }
+
+pub fn has_administrator(env: Env) -> bool {
+    let key = DataKey::Admin;
+    env.storage().instance().has(&key)
+}
+
+#[cfg(test)]
+mod test;

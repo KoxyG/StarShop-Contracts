@@ -1,21 +1,51 @@
-use crate::{DataKey, Error};
-use soroban_sdk::{contract, contracterror, contractimpl, contracttype, Address, Env, String};
+use soroban_sdk::{symbol_short, Address, Env};
+use crate::metadata::NFTDetail;
 
-pub fn distribute(env: Env, to: Address, token_id: u64) -> Result<(), Error> {
-    // Autenticar admin
-    let admin = env.storage().get(&DataKey::Admin)?.ok_or(Error::Unauthorized)?;
-    admin.require_auth();
+const TRANSFER_EVENT: Symbol = symbol_short!("TRANSFER");
 
-    // Verificar propiedad
-    let contract_address = env.current_contract_address();
-    let owner = env.storage().get(&DataKey::Owner(token_id))?.ok_or(Error::NotFound)?;
-    
-    if owner != contract_address {
-        return Err(Error::NotOwner);
+#[derive(Clone)]
+#[contracttype]
+pub struct TransferEvent {
+    pub from: Address,
+    pub to: Address,
+    pub token_id: u128,
+}
+
+#[contractimpl]
+impl super::NFTContract {
+    pub fn transfer_nft(env: Env, from: Address, to: Address, token_id: u128) {
+        from.require_auth();
+
+        if from == env.current_contract_address() {
+            panic!("Sender cannot be contract address")
+        }
+
+        let mut nft_detail = Self::get_nft_detail(env.clone(), token_id);
+
+        if nft_detail.owner != from {
+            panic!("Not the owner of the NFT")
+        }
+
+        let transfer_event = TransferEvent { 
+            from: from.clone(), 
+            to: to.clone(), 
+            token_id 
+        };
+
+        nft_detail.owner = to;
+        env.storage().instance().set(&token_id, &nft_detail);
+        env.events().publish((TRANSFER_EVENT, symbol_short!("transfer")), transfer_event);
     }
 
-    // Transferir NFT
-    env.storage().set(&DataKey::Owner(token_id), &to);
+    pub fn get_nft_detail(env: Env, token_id: u128) -> NFTDetail {
+        env.storage()
+            .instance()
+            .get(&token_id)
+            .unwrap_or_else(|| panic!("NFT does not exist"))
+    }
 
-    Ok(())
+    pub fn has_nft_owner(env: Env, account: Address, token_id: u128) -> bool {
+        let nft_detail = Self::get_nft_detail(env.clone(), token_id);
+        nft_detail.owner == account
+    }
 }
