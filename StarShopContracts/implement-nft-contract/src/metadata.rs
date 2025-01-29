@@ -13,11 +13,10 @@ impl super::NFTContract {
         description: String,
         attributes: Vec<String>,
     ) {
-        // Solo el admin puede actualizar metadata
         Self::check_admin(&env, &admin);
 
         let mut nft: crate::NFTDetail = env.storage().persistent().get(&token_id)
-            .expect("NFT no existe");
+            .expect("NFT not exist");
 
         nft.metadata = crate::NFTMetadata {
             name,
@@ -30,7 +29,7 @@ impl super::NFTContract {
 
     pub fn get_metadata(env: Env, token_id: u32) -> crate::NFTMetadata {
         let nft: crate::NFTDetail = env.storage().persistent().get(&token_id)
-            .expect("NFT no existe");
+            .expect("NFT not exist");
         nft.metadata
     }
 }

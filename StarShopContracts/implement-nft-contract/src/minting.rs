@@ -12,15 +12,13 @@ impl super::NFTContract {
         description: String,
         attributes: Vec<String>,
     ) -> u32 {
-        // Verificar permisos del caller
+        
         to.require_auth();
 
-        // Generar nuevo ID único
         let mut current_id: u32 = env.storage().instance().get(&COUNTER_KEY).unwrap();
         current_id += 1;
         env.storage().instance().set(&COUNTER_KEY, &current_id);
 
-        // Crear metadata y NFT
         let metadata = NFTMetadata {
             name,
             description,
@@ -32,7 +30,6 @@ impl super::NFTContract {
             metadata,
         };
 
-        // Almacenar en persistent storage
         env.storage().persistent().set(&current_id, &nft);
 
         current_id

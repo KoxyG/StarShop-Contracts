@@ -8,15 +8,13 @@ impl super::NFTContract {
     pub fn transfer_nft(env: Env, from: Address, to: Address, token_id: u32) {
         from.require_auth();
 
-        // Verificar ownership
         let mut nft: crate::NFTDetail = env.storage().persistent().get(&token_id)
-            .expect("NFT no existe");
+            .expect("NFT not exist");
 
         if nft.owner != from {
-            panic!("No eres el dueño");
+            panic!("You are not the owner");
         }
 
-        // Actualizar ownership
         nft.owner = to.clone();
         env.storage().persistent().set(&token_id, &nft);
     }
@@ -25,10 +23,10 @@ impl super::NFTContract {
         owner.require_auth();
 
         let nft: crate::NFTDetail = env.storage().persistent().get(&token_id)
-            .expect("NFT no existe");
+            .expect("NFT not exist");
 
         if nft.owner != owner {
-            panic!("No puedes quemar este NFT");
+            panic!("You can't burn this NFT");
         }
 
         env.storage().persistent().remove(&token_id);

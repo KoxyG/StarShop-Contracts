@@ -4,7 +4,7 @@ mod minting;
 mod distribution;
 mod metadata;
 
-const ADMIN_KEY: Symbol = symbol_short!("ADMIN");     // ✅ Correcto
+const ADMIN_KEY: Symbol = symbol_short!("ADMIN");    
 const COUNTER_KEY: Symbol = symbol_short!("COUNTER");
 
 #[derive(Clone, Debug, PartialEq, Eq)]
