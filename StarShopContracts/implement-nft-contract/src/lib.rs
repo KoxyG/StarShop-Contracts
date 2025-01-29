@@ -1,29 +1,26 @@
-use soroban_sdk::{
-    contract, contractimpl, contracttype, symbol_short, Symbol, Address, Env, String,
-};
+use soroban_sdk::{contract, contractimpl, contracttype, Address, Env, String, Symbol, Vec};
+soroban_sdk::Symbol::short;
 
 mod minting;
 mod distribution;
 mod metadata;
 
-pub use minting::*;
-pub use distribution::*;
-pub use metadata::*;
+const ADMIN_KEY: Symbol = Symbol::short("ADMIN");
+const COUNTER_KEY: Symbol = Symbol::short("COUNTER");
 
-const METADATA_KEY: Symbol = symbol_short!("METADATA");
-const COUNTER: Symbol = symbol_short!("COUNTER");
-
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 #[contracttype]
 pub struct NFTMetadata {
     pub name: String,
-    pub symbol: String,
+    pub description: String,
+    pub attributes: Vec<String>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 #[contracttype]
-pub enum DataKey {
-    Admin,
+pub struct NFTDetail {
+    pub owner: Address,
+    pub metadata: NFTMetadata,
 }
 
 #[contract]
@@ -31,36 +28,18 @@ pub struct NFTContract;
 
 #[contractimpl]
 impl NFTContract {
-    pub fn initialize(env: Env, admin: Address, name: String, symbol: String) {
-        if has_administrator(env.clone()) {
-            panic!("Contract already initialized")
+    pub fn initialize(env: Env, admin: Address) {
+        if env.storage().instance().has(&ADMIN_KEY) {
+            panic!("Already initialized");
         }
-
-        let metadata = NFTMetadata { name, symbol };
-        env.storage().instance().set(&DataKey::Admin, &admin);
-        env.storage().persistent().set(&METADATA_KEY, &metadata);
+        env.storage().instance().set(&ADMIN_KEY, &admin);
+        env.storage().instance().set(&COUNTER_KEY, &0u32);
     }
 
-    // Helper functions
-    pub fn read_administrator(env: Env) -> Address {
-        env.storage().instance().get(&DataKey::Admin).unwrap()
-    }
-
-    pub fn name(env: Env) -> String {
-        let metadata: NFTMetadata = env.storage().persistent().get(&METADATA_KEY).unwrap();
-        metadata.name
-    }
-
-    pub fn symbol(env: Env) -> String {
-        let metadata: NFTMetadata = env.storage().persistent().get(&METADATA_KEY).unwrap();
-        metadata.symbol
+    fn check_admin(env: &Env, caller: &Address) {
+        let admin: Address = env.storage().instance().get(&ADMIN_KEY).unwrap();
+        if caller != &admin {
+            panic!("Unauthorized");
+        }
     }
 }
-
-pub fn has_administrator(env: Env) -> bool {
-    let key = DataKey::Admin;
-    env.storage().instance().has(&key)
-}
-
-#[cfg(test)]
-mod test;

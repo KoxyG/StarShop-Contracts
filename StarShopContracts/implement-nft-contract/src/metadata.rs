@@ -1,45 +1,36 @@
-use soroban_sdk::{Address, Env, String};
-use std::collections::HashMap;
-
-#[derive(Clone)]
-#[contracttype]
-pub struct NFTMetadataDetails {
-    pub description: String,
-    pub attributes: HashMap<String, String>,
-}
-
-#[derive(Clone)]
-#[contracttype]
-pub struct NFTDetail {
-    pub owner: Address,
-    pub uri: String,
-    pub metadata: Option<NFTMetadataDetails>,
-}
+use soroban_sdk::contractimpl;
+use soroban_sdk::{Env, Address, String, Vec};
+use crate::NFTContractClient;
+use crate::NFTContractArgs;
 
 #[contractimpl]
 impl super::NFTContract {
-    pub fn set_nft_metadata(
+    pub fn update_metadata(
         env: Env,
-        token_id: u128,
+        admin: Address,
+        token_id: u32,
+        name: String,
         description: String,
-        attributes: HashMap<String, String>,
+        attributes: Vec<String>,
     ) {
-        let admin = Self::read_administrator(env.clone());
-        admin.require_auth();
+        // Solo el admin puede actualizar metadata
+        Self::check_admin(&env, &admin);
 
-        let mut nft_detail = Self::get_nft_detail(env.clone(), token_id);
-        
-        let metadata = NFTMetadataDetails {
+        let mut nft: crate::NFTDetail = env.storage().persistent().get(&token_id)
+            .expect("NFT no existe");
+
+        nft.metadata = crate::NFTMetadata {
+            name,
             description,
             attributes,
         };
 
-        nft_detail.metadata = Some(metadata);
-        env.storage().instance().set(&token_id, &nft_detail);
+        env.storage().persistent().set(&token_id, &nft);
     }
 
-    pub fn get_nft_metadata(env: Env, token_id: u128) -> Option<NFTMetadataDetails> {
-        let nft_detail = Self::get_nft_detail(env, token_id);
-        nft_detail.metadata
+    pub fn get_metadata(env: Env, token_id: u32) -> crate::NFTMetadata {
+        let nft: crate::NFTDetail = env.storage().persistent().get(&token_id)
+            .expect("NFT no existe");
+        nft.metadata
     }
 }

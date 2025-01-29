@@ -1,75 +1,40 @@
-use soroban_sdk::{contractimpl, contracttype, symbol_short, Address, Env, String, Symbol};
-use crate::metadata::NFTDetail;
-
-const MINT_EVENT: Symbol = symbol_short!("MINT");
-const BURN_EVENT: Symbol = symbol_short!("BURN");
-const COUNTER: Symbol = symbol_short!("COUNTER");
-
-#[derive(Clone)]
-#[contracttype]
-pub struct MintEvent {
-    pub address: Address,
-    pub token_id: u128,
-}
-
-#[derive(Clone)]
-#[contracttype]
-pub struct BurnEvent {
-    pub address: Address,
-    pub token_id: u128,
-}
+use soroban_sdk::{contractimpl, Address, Env, String, Vec};
+use crate::{NFTMetadata, NFTDetail, COUNTER_KEY};
+use crate::NFTContractClient;
+use crate::NFTContractArgs;
 
 #[contractimpl]
 impl super::NFTContract {
-    pub fn mint_nft(env: Env, to: Address, token_uri: String) -> u128 {
+    pub fn mint_nft(
+        env: Env,
+        to: Address,
+        name: String,
+        description: String,
+        attributes: Vec<String>,
+    ) -> u32 {
+        // Verificar permisos del caller
         to.require_auth();
 
-        if to == env.current_contract_address() {
-            panic!("Sender cannot be contract address")
-        } else if token_uri.is_empty() {
-            panic!("NFT URI cannot be empty")
-        }
+        // Generar nuevo ID único
+        let mut current_id: u32 = env.storage().instance().get(&COUNTER_KEY).unwrap();
+        current_id += 1;
+        env.storage().instance().set(&COUNTER_KEY, &current_id);
 
-        let mut token_id: u128 = env.storage().instance().get(&COUNTER).unwrap_or(0);
-        token_id += 1;
-
-        let mint_event = MintEvent { 
-            address: to.clone(), 
-            token_id 
-        };
-        
-        let nft_detail = NFTDetail {
-            owner: to,
-            uri: token_uri,
-            metadata: None, // Will be set later via metadata module
+        // Crear metadata y NFT
+        let metadata = NFTMetadata {
+            name,
+            description,
+            attributes,
         };
 
-        env.storage().instance().set(&token_id, &nft_detail);
-        env.storage().instance().set(&COUNTER, &token_id);
-        env.events().publish((MINT_EVENT, symbol_short!("mint")), mint_event);
-        
-        token_id
-    }
-
-    pub fn burn_nft(env: Env, owner: Address, token_id: u128) {
-        owner.require_auth();
-
-        let nft_detail = Self::get_nft_detail(env.clone(), token_id);
-
-        if nft_detail.owner != owner {
-            panic!("Not the owner of the NFT");
-        }
-
-        if owner == env.current_contract_address() {
-            panic!("Sender cannot be contract address");
-        }
-
-        let burn_event = BurnEvent { 
-            address: owner.clone(), 
-            token_id 
+        let nft = NFTDetail {
+            owner: to.clone(),
+            metadata,
         };
 
-        env.storage().instance().remove(&token_id);
-        env.events().publish((BURN_EVENT, symbol_short!("burn")), burn_event);
+        // Almacenar en persistent storage
+        env.storage().persistent().set(&current_id, &nft);
+
+        current_id
     }
 }

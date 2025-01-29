@@ -1,51 +1,36 @@
-use soroban_sdk::{contractimpl, contracttype, symbol_short, Address, Env, Symbol};
-use crate::metadata::NFTDetail;
-
-const TRANSFER_EVENT: Symbol = symbol_short!("TRANSFER");
-
-#[derive(Clone)]
-#[contracttype]
-pub struct TransferEvent {
-    pub from: Address,
-    pub to: Address,
-    pub token_id: u128,
-}
+use soroban_sdk::contractimpl;
+use soroban_sdk::{Env, Address};
+use crate::NFTContractClient;
+use crate::NFTContractArgs;
 
 #[contractimpl]
 impl super::NFTContract {
-    pub fn transfer_nft(env: Env, from: Address, to: Address, token_id: u128) {
+    pub fn transfer_nft(env: Env, from: Address, to: Address, token_id: u32) {
         from.require_auth();
 
-        if from == env.current_contract_address() {
-            panic!("Sender cannot be contract address")
+        // Verificar ownership
+        let mut nft: crate::NFTDetail = env.storage().persistent().get(&token_id)
+            .expect("NFT no existe");
+
+        if nft.owner != from {
+            panic!("No eres el dueño");
         }
 
-        let mut nft_detail = Self::get_nft_detail(env.clone(), token_id);
+        // Actualizar ownership
+        nft.owner = to.clone();
+        env.storage().persistent().set(&token_id, &nft);
+    }
 
-        if nft_detail.owner != from {
-            panic!("Not the owner of the NFT")
+    pub fn burn_nft(env: Env, owner: Address, token_id: u32) {
+        owner.require_auth();
+
+        let nft: crate::NFTDetail = env.storage().persistent().get(&token_id)
+            .expect("NFT no existe");
+
+        if nft.owner != owner {
+            panic!("No puedes quemar este NFT");
         }
 
-        let transfer_event = TransferEvent { 
-            from: from.clone(), 
-            to: to.clone(), 
-            token_id 
-        };
-
-        nft_detail.owner = to;
-        env.storage().instance().set(&token_id, &nft_detail);
-        env.events().publish((TRANSFER_EVENT, symbol_short!("transfer")), transfer_event);
-    }
-
-    pub fn get_nft_detail(env: Env, token_id: u128) -> NFTDetail {
-        env.storage()
-            .instance()
-            .get(&token_id)
-            .unwrap_or_else(|| panic!("NFT does not exist"))
-    }
-
-    pub fn has_nft_owner(env: Env, account: Address, token_id: u128) -> bool {
-        let nft_detail = Self::get_nft_detail(env.clone(), token_id);
-        nft_detail.owner == account
+        env.storage().persistent().remove(&token_id);
     }
 }
