@@ -1,4 +1,4 @@
-use soroban_sdk::{symbol_short, Address, Env};
+use soroban_sdk::{contractimpl, contracttype, symbol_short, Address, Env, Symbol};
 use crate::metadata::NFTDetail;
 
 const TRANSFER_EVENT: Symbol = symbol_short!("TRANSFER");
