@@ -1,12 +1,11 @@
-use soroban_sdk::{contract, contractimpl, contracttype, Address, Env, String, Symbol, Vec};
-soroban_sdk::Symbol::short;
+use soroban_sdk::{contract, contractimpl, contracttype, symbol_short, Address, Env, String, Symbol ,Vec};
 
 mod minting;
 mod distribution;
 mod metadata;
 
-const ADMIN_KEY: Symbol = Symbol::short("ADMIN");
-const COUNTER_KEY: Symbol = Symbol::short("COUNTER");
+const ADMIN_KEY: Symbol = symbol_short!("ADMIN");     // ✅ Correcto
+const COUNTER_KEY: Symbol = symbol_short!("COUNTER");
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[contracttype]
