@@ -1,4 +1,4 @@
-use soroban_sdk::{contract, contractimpl, Address, Env};
+use soroban_sdk::{contract, contractimpl, Address, Env, symbol_short};
 use soroban_sdk::token::{TokenClient, TokenIdentifier};
 
 
@@ -28,6 +28,11 @@ impl RefundContract {
    if xlm_client.transfer(&seller, &buyer, &amount).is_err() {
       return Err(RefundError::TransferFailed);
    };
+  
+   // emit event
+   let topics = (symbol_short!("refund"));
+   let event_payload = vec![e, seller, buyer, amount];
+   e.events().publish(topics, event_payload);
 
     Ok()
 

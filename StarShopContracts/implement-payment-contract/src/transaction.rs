@@ -1,4 +1,4 @@
-use soroban_sdk::{contract, contractimpl, Address, Env};
+use soroban_sdk::{contract, contractimpl, Address, Env, symbol_short};
 use soroban_sdk::token::{TokenClient, TokenIdentifier};
 
 
@@ -42,7 +42,12 @@ impl TransactionContract {
       return Err(TransactionError::TransferFailed);
    };
 
-    Ok()
+   // emit event
+   let topics = (symbol_short!("payment_transaction"));
+   let event_payload = vec![e, signer, to, amount_to_deposit];
+   e.events().publish(topics, event_payload);
+   
+   Ok()
 
   }
 

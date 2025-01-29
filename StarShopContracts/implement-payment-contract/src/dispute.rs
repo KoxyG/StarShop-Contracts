@@ -40,8 +40,12 @@ impl DisputeContract {
                 xlm_client.transfer(&arbitrator, &seller, &refund_amount);
             }
         }
-
-     Ok(())
+    
+   // emit event
+   let topics = (symbol_short!("dispute"));
+   let event_payload = vec![e, arbitrator, seller, buyer, refund_amount];
+   e.events().publish(topics, event_payload);
+   Ok(())
   }
 
 }
