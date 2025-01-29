@@ -12,6 +12,10 @@ impl RefundContract {
   pub fn refund (e: Env, seller: Address, buyer: Address, amount: i128) -> Result<(), RefundError> {
     seller.require_auth();
 
+    if amount_to_deposit <= 0 {
+        return Err(RefundError::InvalidAmount);
+    }
+
     let xml_token_id = TokenIdentifier::native();
 
     let xlm_client = TokenClient::new(&e, &xml_token_id);
@@ -45,5 +49,6 @@ impl RefundContract {
 pub enum RefundError {
     InsufficientFunds,
     TransferFailed,
+    InvalidAmount,
 }
 
