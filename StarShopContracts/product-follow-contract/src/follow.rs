@@ -46,7 +46,7 @@ impl<'a> FollowManager<'a> {
             }
         }
 
-        let key = symbol_short!("flw");
+        let key = symbol_short!("followers");
         let mut followers = self.get_followers(product_id);
         
         // Check if user is already following
@@ -69,7 +69,7 @@ impl<'a> FollowManager<'a> {
     }
 
     pub fn get_followers(&self, _product_id: u32) -> Vec<FollowData> {
-        let key = symbol_short!("flw");
+        let key = symbol_short!("followers");
         self.env.storage().persistent()
             .get::<_, Vec<FollowData>>(&key)
             .unwrap_or_else(|| Vec::new(self.env))
@@ -82,7 +82,7 @@ impl<'a> FollowManager<'a> {
     ) -> Result<(), FollowError> {
         user.require_auth();
 
-        let key = symbol_short!("flw");
+        let key = symbol_short!("followers");
         let follows: Vec<FollowData> = self.env
             .storage().persistent()
             .get(&key)
@@ -125,7 +125,7 @@ impl<'a> FollowManager<'a> {
 
     #[allow(dead_code)]
     fn get_storage_key(&self, _product_id: u32) -> Symbol {
-        symbol_short!("flw") 
+        symbol_short!("followers")
     }
 }
 
