@@ -1,85 +1,87 @@
-use soroban_sdk::{contract, contractimpl, Address, Env};
-use soroban_sdk::token::{TokenClient, TokenIdentifier};
+use soroban_sdk::{contract, contractimpl, Address, Env, symbol_short, contracterror, Val, IntoVal, TryFromVal, TryIntoVal, ConversionError};
+use soroban_sdk::token::Client as TokenClient;
 
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[repr(u32)]
+pub enum DisputeDecision {
+    RefundBuyer = 0,
+    PaySeller = 1,
+}
+
+impl TryFromVal<Env, Val> for DisputeDecision {
+    type Error = ConversionError;
+
+    fn try_from_val(env: &Env, val: &Val) -> Result<Self, Self::Error> {
+        let val: u32 = val.try_into_val(env)?;
+        match val {
+            0 => Ok(DisputeDecision::RefundBuyer),
+            1 => Ok(DisputeDecision::PaySeller),
+            _ => Err(ConversionError),
+        }
+    }
+}
+
+impl IntoVal<Env, Val> for DisputeDecision {
+    fn into_val(&self, env: &Env) -> Val {
+        (*self as u32).into_val(env)
+    }
+}
+
+#[contracterror]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
+pub enum DisputeError {
+    InsufficientFunds = 1,
+    TransferFailed = 2,
+    InvalidAmount = 3,
+    UnauthorizedAccess = 4,
+}
 
 #[contract]
-pub struct DisputeContract
-
+pub struct DisputeContract;
 
 #[contractimpl]
 impl DisputeContract {
-
-  pub fn resolve_dispute (e: Env,
+    pub fn resolve_dispute(
+        e: Env,
+        token_id: Address,
         arbitrator: Address,
         buyer: Address,
         seller: Address,
         refund_amount: i128,
-        decision: DisputeDecision) -> Result<(), DisputeError> {
-    
-    
-    arbitrator.require_auth();
-    
-    if amount_to_deposit <= 0 {
-        return Err(DisputeError::InvalidAmount);
-    }
+        decision: DisputeDecision,
+    ) -> Result<(), DisputeError> {
+        // Check authorization
+        arbitrator.require_auth();
 
-    if buyer == seller {
-        return Err(DisputeError::CanNotBeTheSame);
-    }
+        // Input validations
+        if refund_amount <= 0 {
+            return Err(DisputeError::InvalidAmount);
+        }
 
-    if arbitrator == seller {
-        return Err(DisputeError::CanNotBeTheSame);
-    }
+        let token = TokenClient::new(&e, &token_id);
 
-    if arbitrator == buyer {
-        return Err(DisputeError::CanNotBeTheSame);
-    }
-
-    let xlm_token_id = TokenIdentifier::native();
-    let xlm_client = TokenClient::new(&e, &xlm_token_id);
-
-
-    // let contract_address = e.current_contract_address();
-
-
-    let arbitrator_balance = xlm_client.balance(&arbitrator);
+        // Check balance
+        let arbitrator_balance = token.balance(&arbitrator);
         if arbitrator_balance < refund_amount {
             return Err(DisputeError::InsufficientFunds);
         }
-        
-    // Transfer XLM base on decision. 
-   match decision {
-            DisputeDecision::RefundToBuyer => {
-                if xlm_client.transfer(&arbitrator, &buyer, &refund_amount).is_err() {
-                    return Err(DisputeError::TransferFailed);
-                }
+
+        // Process transfer based on decision
+        match decision {
+            DisputeDecision::RefundBuyer => {
+                token.transfer(&arbitrator, &buyer, &refund_amount);
             }
-            DisputeDecision::ReleaseToSeller => {
-                if xlm_client.transfer(&arbitrator, &seller, &refund_amount).is_err() {
-                    return Err(DisputeError::TransferFailed);
-                }
+            DisputeDecision::PaySeller => {
+                token.transfer(&arbitrator, &seller, &refund_amount);
             }
         }
-    
-   // emit event
-   let topics = (symbol_short!("dispute"));
-   let event_payload = vec![e, arbitrator, seller, buyer, refund_amount];
-   e.events().publish(topics, event_payload);
-   Ok(())
-  }
 
-}
+        // Emit event
+        e.events().publish(
+            (symbol_short!("dispute"),),
+            (arbitrator, buyer, seller, refund_amount, decision as u32),
+        );
 
-
-#[derive(Debug)]
-pub enum DisputeError {
-    InsufficientFunds,
-    TransferFailed,
-    CanNotBeTheSame,
-}
-
-#[derive(Clone, Debug)]
-pub enum DisputeDecision {
-    RefundToBuyer,
-    ReleaseToSeller,
+        Ok(())
+    }
 }

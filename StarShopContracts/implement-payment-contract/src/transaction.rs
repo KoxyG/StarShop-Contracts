@@ -1,64 +1,56 @@
-use soroban_sdk::{contract, contractimpl, Address, Env, symbol_short};
-use soroban_sdk::token::{TokenClient, TokenIdentifier};
+use soroban_sdk::{contract, contractimpl, Address, Env, symbol_short, contracterror};
+use soroban_sdk::token::Client as TokenClient;
 
+#[contracterror]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
+pub enum TransactionError {
+    InsufficientFunds = 1,
+    TransferFailed = 2,
+    InvalidAmount = 3,
+    UnauthorizedAccess = 4,
+}
 
 #[contract]
-pub struct TransactionContract
-
+pub struct TransactionContract;
 
 #[contractimpl]
 impl TransactionContract {
+    pub fn process_deposit(
+        e: Env,
+        token_id: Address,
+        signer: Address,
+        to: Address,
+        amount_to_deposit: i128
+    ) -> Result<(), TransactionError> {
+        // Check authorization
+        signer.require_auth();
 
-  pub fn payment_transaction (e: Env, signer: Address, to: Address, amount_to_deposit: i128) -> Result<(), TransactionError> {
-    signer.require_auth();
+        // Input validations
+        if amount_to_deposit <= 0 {
+            return Err(TransactionError::InvalidAmount);
+        }
 
-    // check for invalid amount
-    if amount_to_deposit <= 0 {
-        return Err(TransactionError::InvalidAmount);
+        if signer == to {
+            return Err(TransactionError::UnauthorizedAccess);
+        }
+
+        let token = TokenClient::new(&e, &token_id);
+
+        // Check balance
+        let signer_balance = token.balance(&signer);
+        if signer_balance < amount_to_deposit {
+            return Err(TransactionError::InsufficientFunds);
+        }
+
+        // Process transfer
+        token.transfer(&signer, &to, &amount_to_deposit);
+
+        // Emit event
+        e.events().publish(
+            (symbol_short!("deposit"),),
+            (signer, to, amount_to_deposit),
+        );
+
+        Ok(())
     }
-
-    // xml token id
-    let xml_token_id = TokenIdentifier::native();
-
-    // initialize xml token transaction
-    let xlm_client = TokenClient::new(&e, &xml_token_id);
-
-    // Get the signer's balance
-    let signer_balance = xlm_client.balance(&signer);
-
-    if signer_balance < amount_to_deposit {
-       return Err(TransactionError::InsufficientFunds);
-    }
-
-    // Ensure the signer is authorized to send funds
-    if signer == to {
-        return Err(TransactionError::UnauthorizedAccess);
-    }
-
-   //  let contract_address = e.current_contract_address();
-
-    // Transfer XLM from signer to contract
-   if xlm_client.transfer(&signer, &to, &amount_to_deposit).is_err() {
-      return Err(TransactionError::TransferFailed);
-   };
-
-   // emit event
-   let topics = (symbol_short!("payment_transaction"));
-   let event_payload = vec![e, signer, to, amount_to_deposit];
-   e.events().publish(topics, event_payload);
-   
-   Ok()
-
-  }
-
 }
-
-
-#[derive(Debug)]
-pub enum TransactionError {
-    InsufficientFunds,
-    InvalidAmount,
-    UnauthorizedAccess,
-    TransferFailed
-}
-
