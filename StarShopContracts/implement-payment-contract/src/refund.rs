@@ -1,54 +1,56 @@
-use soroban_sdk::{contract, contractimpl, Address, Env, symbol_short};
-use soroban_sdk::token::{TokenClient, TokenIdentifier};
+use soroban_sdk::{contract, contractimpl, Address, Env, symbol_short, contracterror};
+use soroban_sdk::token::Client as TokenClient;
 
+#[contracterror]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
+pub enum RefundError {
+    InsufficientFunds = 1,
+    TransferFailed = 2,
+    InvalidAmount = 3,
+    UnauthorizedAccess = 4,
+}
 
 #[contract]
-pub struct RefundContract
-
+pub struct RefundContract;
 
 #[contractimpl]
 impl RefundContract {
+    pub fn process_refund(
+        e: Env,
+        token_id: Address,
+        signer: Address,
+        to: Address,
+        refund_amount: i128
+    ) -> Result<(), RefundError> {
+        // Check authorization
+        signer.require_auth();
 
-  pub fn refund (e: Env, seller: Address, buyer: Address, amount: i128) -> Result<(), RefundError> {
-    seller.require_auth();
+        // Input validations
+        if refund_amount <= 0 {
+            return Err(RefundError::InvalidAmount);
+        }
 
-    if amount_to_deposit <= 0 {
-        return Err(RefundError::InvalidAmount);
+        if signer == to {
+            return Err(RefundError::UnauthorizedAccess);
+        }
+
+        let token = TokenClient::new(&e, &token_id);
+
+        // Check balance
+        let signer_balance = token.balance(&signer);
+        if signer_balance < refund_amount {
+            return Err(RefundError::InsufficientFunds);
+        }
+
+        // Process transfer
+        token.transfer(&signer, &to, &refund_amount);
+
+        // Emit event
+        e.events().publish(
+            (symbol_short!("refund"),),
+            (signer, to, refund_amount),
+        );
+
+        Ok(())
     }
-
-    let xml_token_id = TokenIdentifier::native();
-
-    let xlm_client = TokenClient::new(&e, &xml_token_id);
-
-    let seller_balance = xlm_client.balance(&seller);
-
-    if seller_balance < amount {
-       return Err(RefundError::InsufficientFunds);
-    }
-
-    // let contract_address = e.current_contract_address();
-
-    // Transfer XLM from seller to  buyer
-   if xlm_client.transfer(&seller, &buyer, &amount).is_err() {
-      return Err(RefundError::TransferFailed);
-   };
-  
-   // emit event
-   let topics = (symbol_short!("refund"));
-   let event_payload = vec![e, seller, buyer, amount];
-   e.events().publish(topics, event_payload);
-
-    Ok()
-
-  }
-
 }
-
-
-#[derive(Debug)]
-pub enum RefundError {
-    InsufficientFunds,
-    TransferFailed,
-    InvalidAmount,
-}
-
