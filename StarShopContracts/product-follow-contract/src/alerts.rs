@@ -2,7 +2,7 @@ use crate::datatype::{
     DataKeys, EventLog, FollowCategory, FollowData, FollowError, NotificationPriority,
 };
 use crate::interface::AlertOperations;
-use soroban_sdk::{Address, Env, String, Vec};
+use soroban_sdk::{Address, Env, Vec};
 
 pub struct AlertSystem;
 

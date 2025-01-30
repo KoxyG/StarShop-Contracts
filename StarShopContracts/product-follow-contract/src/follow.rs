@@ -1,9 +1,8 @@
 use crate::datatype::{
-    DataKeys, FollowCategory, FollowData, FollowError, NotificationPreferences,
-    NotificationPriority,
+    DataKeys, FollowCategory, FollowData, FollowError,
 };
 use crate::interface::FollowOperations;
-use soroban_sdk::{Address, Env, String, Vec};
+use soroban_sdk::{Address, Env, Vec};
 
 // This is a struct that implements the FollowOperations trait
 pub struct FollowSystem;

@@ -3,7 +3,7 @@ use crate::datatype::{
     NotificationPriority,
 };
 use crate::interface::NotificationOperations;
-use soroban_sdk::{Address, Env, String, Vec};
+use soroban_sdk::{Address, Env, Vec};
 
 pub struct NotificationSystem;
 
