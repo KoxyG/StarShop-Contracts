@@ -138,7 +138,7 @@ impl NotificationSystem {
             {
                 // Check if the user follows the product and relevant category
                 if follows.iter().any(|f| {
-                    f.product_id == event.product_id && f.categories.contains(&event.event_type)
+                    u128::from(f.product_id) == event.product_id && f.categories.contains(&event.event_type)
                 }) {
                     target_users.push_back(user.clone());
                 }

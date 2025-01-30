@@ -27,8 +27,9 @@ pub enum DataKeys {
     AlertSettings(Address),       // User notification preferences
     NotificationHistory(Address), // Record of past notifications
     FollowLimit(Address),         // Max follow limit per user
-    ExpirationTracker(Address),
-    AllUsers, // Tracks follow expiration times
+    ExpirationTracker(Address),   // Tracks follow expiration times
+    LastNotification(Address),    // Last notification timestamp
+    AllUsers,
 }
 
 /// Error types for the follow system
@@ -36,21 +37,23 @@ pub enum DataKeys {
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 #[repr(u32)]
 pub enum FollowError {
-    FollowLimitExceeded = 1, // User exceeded follow limit
-    AlreadyFollowing = 2,    // Product already followed
-    NotFollowing = 3,        // Cannot unfollow a non-followed product
-    InvalidCategory = 4,     // Invalid follow category
-    Unauthorized = 5,        // Unauthorized action
+    FollowLimitExceeded = 1,
+    AlreadyFollowing = 2,
+    NotFollowing = 3,
+    InvalidCategory = 4,
+    Unauthorized = 5,
+    InvalidProductId = 6,
 }
 
 /// Data structure representing a followed product
 #[contracttype]
 #[derive(Clone)]
 pub struct FollowData {
-    pub product_id: u128,                // ID of the followed product
-    pub categories: Vec<FollowCategory>, // Categories of interest
-    pub timestamp: u64,                  // When the product was followed
-    pub expires_at: Option<u64>,         // Optional expiration timestamp
+    pub user: Address,
+    pub product_id: u32,
+    pub categories: Vec<FollowCategory>,
+    pub timestamp: u64,
+    pub expires_at: Option<u64>,
 }
 
 /// User's follow preferences and settings
@@ -70,4 +73,22 @@ pub struct EventLog {
     pub event_type: FollowCategory,     // Type of event
     pub triggered_at: u64,              // Timestamp when event occurred
     pub priority: NotificationPriority, // Priority level of notification
+}
+
+#[contracterror]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
+pub enum Error {
+    AlreadyFollowing = 1,
+    NotFollowing = 2,
+    InvalidProduct = 3,
+    NotificationFailed = 4,
+}
+
+#[allow(dead_code)]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum AlertType {
+    PriceChange,
+    StockUpdate,
+    ProductUpdate,
+    Promotion,
 }

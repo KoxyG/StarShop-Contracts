@@ -1,4 +1,7 @@
-use crate::datatype::{EventLog, FollowCategory, FollowData, FollowError, NotificationPreferences};
+use crate::datatype::{
+    FollowCategory, FollowData, FollowError,
+    NotificationPreferences, EventLog,
+};
 use soroban_sdk::{Address, Env, Vec};
 
 /// Handles product follow operations
@@ -33,7 +36,7 @@ pub trait AlertOperations {
 }
 
 /// Handles notification preferences and history
- #[allow(dead_code)]
+#[allow(dead_code)]
 pub trait NotificationOperations {
     /// Sets user notification preferences
     fn set_notification_preferences(
