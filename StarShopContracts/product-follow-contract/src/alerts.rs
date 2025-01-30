@@ -7,7 +7,7 @@ use soroban_sdk::{Address, Env, Vec};
 pub struct AlertSystem;
 
 impl AlertOperations for AlertSystem {
-    fn check_price_change(env: Env, product_id: u128, new_price: u64) -> Result<(), FollowError> {
+    fn check_price_change(env: Env, product_id: u128, _new_price: u64) -> Result<(), FollowError> {
         // Get all users following this product
         let users = Self::get_users_following_product(&env, product_id)?;
 
@@ -20,7 +20,7 @@ impl AlertOperations for AlertSystem {
                 .unwrap_or_else(|| Vec::new(&env));
 
             // Check if user is following for price changes
-            if let Some(follow) = follows.iter().find(|f| {
+            if let Some(_follow) = follows.iter().find(|f| {
                 f.product_id == product_id && f.categories.contains(&FollowCategory::PriceChange)
             }) {
                 // Log the price change event
@@ -49,7 +49,7 @@ impl AlertOperations for AlertSystem {
                 .get(&follow_key)
                 .unwrap_or_else(|| Vec::new(&env));
 
-            if let Some(follow) = follows.iter().find(|f| {
+            if let Some(_follow) = follows.iter().find(|f| {
                 f.product_id == product_id && f.categories.contains(&FollowCategory::Restock)
             }) {
                 let event = EventLog {
@@ -77,7 +77,7 @@ impl AlertOperations for AlertSystem {
                 .get(&follow_key)
                 .unwrap_or_else(|| Vec::new(&env));
 
-            if let Some(follow) = follows.iter().find(|f| {
+            if let Some(_follow) = follows.iter().find(|f| {
                 f.product_id == product_id && f.categories.contains(&FollowCategory::SpecialOffer)
             }) {
                 let event = EventLog {

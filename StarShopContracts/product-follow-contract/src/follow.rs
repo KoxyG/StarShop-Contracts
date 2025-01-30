@@ -5,6 +5,7 @@ use crate::interface::FollowOperations;
 use soroban_sdk::{Address, Env, Vec};
 
 // This is a struct that implements the FollowOperations trait
+#[allow(dead_code)]
 pub struct FollowSystem;
 
 // This is a constant for the default follow limit
@@ -21,7 +22,7 @@ impl FollowOperations for FollowSystem {
     ) -> Result<(), FollowError> {
         // This requires that the user is authorized to perform this action
         user.require_auth();
-
+       
         // This gets the current follow list for the user
         let follow_key = DataKeys::FollowList(user.clone());
         let mut follows: Vec<FollowData> = env

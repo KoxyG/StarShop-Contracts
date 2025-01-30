@@ -2,6 +2,7 @@ use crate::datatype::{EventLog, FollowCategory, FollowData, FollowError, Notific
 use soroban_sdk::{Address, Env, Vec};
 
 /// Handles product follow operations
+#[allow(dead_code)]
 pub trait FollowOperations {
     /// Allows a user to follow a product with specific categories
     fn follow_product(
@@ -19,6 +20,7 @@ pub trait FollowOperations {
 }
 
 /// Manages alert triggers for followed products
+#[allow(dead_code)]
 pub trait AlertOperations {
     /// Checks for price changes and triggers notifications
     fn check_price_change(env: Env, product_id: u128, new_price: u64) -> Result<(), FollowError>;
@@ -31,6 +33,7 @@ pub trait AlertOperations {
 }
 
 /// Handles notification preferences and history
+ #[allow(dead_code)]
 pub trait NotificationOperations {
     /// Sets user notification preferences
     fn set_notification_preferences(
