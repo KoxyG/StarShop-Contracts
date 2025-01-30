@@ -21,14 +21,14 @@ impl AlertOperations for AlertSystem {
 
             // Check if user is following for price changes
             if let Some(_follow) = follows.iter().find(|f| {
-                f.product_id == product_id && f.categories.contains(&FollowCategory::PriceChange)
+                u128::from(f.product_id) == product_id && f.categories.contains(&FollowCategory::PriceChange)
             }) {
                 // Log the price change event
                 let event = EventLog {
                     product_id,
                     event_type: FollowCategory::PriceChange,
                     triggered_at: env.ledger().timestamp(),
-                    priority: NotificationPriority::High, // Price changes are high priority
+                    priority: NotificationPriority::High,
                 };
 
                 Self::log_event(&env, user_address.clone(), event)?;
@@ -50,7 +50,7 @@ impl AlertOperations for AlertSystem {
                 .unwrap_or_else(|| Vec::new(&env));
 
             if let Some(_follow) = follows.iter().find(|f| {
-                f.product_id == product_id && f.categories.contains(&FollowCategory::Restock)
+                u128::from(f.product_id) == product_id && f.categories.contains(&FollowCategory::Restock)
             }) {
                 let event = EventLog {
                     product_id,
@@ -78,7 +78,7 @@ impl AlertOperations for AlertSystem {
                 .unwrap_or_else(|| Vec::new(&env));
 
             if let Some(_follow) = follows.iter().find(|f| {
-                f.product_id == product_id && f.categories.contains(&FollowCategory::SpecialOffer)
+                u128::from(f.product_id) == product_id && f.categories.contains(&FollowCategory::SpecialOffer)
             }) {
                 let event = EventLog {
                     product_id,
@@ -103,7 +103,6 @@ impl AlertSystem {
     ) -> Result<Vec<Address>, FollowError> {
         let mut following_users = Vec::new(env);
 
-        // Get all users with follow lists
         let all_users_key = DataKeys::AllUsers;
         let all_users: Vec<Address> = env
             .storage()
@@ -111,7 +110,6 @@ impl AlertSystem {
             .get(&all_users_key)
             .unwrap_or_else(|| Vec::new(env));
 
-        // Iterate over all users and check their follow lists
         for user in all_users.iter() {
             let follow_list_key = DataKeys::FollowList(user.clone());
             if let Some(follows) = env
@@ -119,8 +117,7 @@ impl AlertSystem {
                 .persistent()
                 .get::<DataKeys, Vec<FollowData>>(&follow_list_key)
             {
-                // Check if the user follows the product
-                if follows.iter().any(|f| f.product_id == product_id) {
+                if follows.iter().any(|f| u128::from(f.product_id) == product_id) {
                     following_users.push_back(user.clone());
                 }
             }
@@ -129,8 +126,27 @@ impl AlertSystem {
         Ok(following_users)
     }
 
-    // Helper function to log events
+    // Rate limiting
+    fn check_rate_limit(env: &Env, user: &Address) -> bool {
+        let last_notification = env.storage().persistent()
+            .get::<_, u64>(&DataKeys::LastNotification(user.clone()))
+            .unwrap_or(0);
+        
+        let current_time = env.ledger().timestamp();
+        current_time - last_notification > 3600
+    }
+
     fn log_event(env: &Env, user: Address, event: EventLog) -> Result<(), FollowError> {
+        if !Self::check_rate_limit(env, &user) {
+            return Ok(());
+        }
+        
+        // Update the last notification timestamp
+        env.storage().persistent().set(
+            &DataKeys::LastNotification(user.clone()),
+            &env.ledger().timestamp()
+        );
+
         let history_key = DataKeys::NotificationHistory(user);
         let mut history: Vec<EventLog> = env
             .storage()
