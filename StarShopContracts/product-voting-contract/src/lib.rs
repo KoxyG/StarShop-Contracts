@@ -5,7 +5,7 @@ pub mod limits;
 pub mod ranking;
 pub mod types;
 pub mod vote;
-
+mod test;
 use limits::VoteLimiter;
 use ranking::RankingCalculator;
 use types::{Error, VoteType};
