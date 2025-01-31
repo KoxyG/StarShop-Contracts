@@ -151,8 +151,6 @@ impl ProductFollowContract {
     }
 
     pub fn unfollow_product(env: Env, user: Address, product_id: u32) -> Result<(), Error> {
-        user.require_auth();
-
         let follow_manager = FollowManager::new(&env);
         follow_manager
             .remove_follower(&user, product_id)

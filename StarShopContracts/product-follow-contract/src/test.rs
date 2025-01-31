@@ -25,11 +25,11 @@ fn test_panic_follower_not_auth() {
 fn test_panic_user_already_following() {
     let env = Env::default();
     let contract_id = env.register(ProductFollowContract, ());
-    env.mock_all_auths();
     let client = ProductFollowContractClient::new(&env, &contract_id);
     let follower_address = <Address>::generate(&env);
     let product_id = 3u32;
     let categories = vec![&env, FollowCategory::PriceChange];
+    env.mock_all_auths();
 
     client.follow_product(&follower_address, &product_id, &categories);
     client.follow_product(&follower_address, &product_id, &categories);
@@ -40,10 +40,10 @@ fn test_panic_user_already_following() {
 fn test_panic_follow_limit_exceeded() {
     let env = Env::default();
     let contract_id = env.register(ProductFollowContract, ());
-    env.mock_all_auths();
     let client = ProductFollowContractClient::new(&env, &contract_id);
     let product_id = 3u32;
     let categories = vec![&env, FollowCategory::PriceChange];
+    env.mock_all_auths();
 
     for _ in 0..DEFAULT_FOLLOW_LIMIT + 1 {
         let follower_address = <Address>::generate(&env);
@@ -55,11 +55,11 @@ fn test_panic_follow_limit_exceeded() {
 fn test_add_follower() {
     let env = Env::default();
     let contract_id = env.register(ProductFollowContract, ());
-    env.mock_all_auths();
     let client = ProductFollowContractClient::new(&env, &contract_id);
     let follower_address = <Address>::generate(&env);
     let product_id = 3u32;
     let categories = vec![&env, FollowCategory::PriceChange];
+    env.mock_all_auths();
 
     client.follow_product(&follower_address, &product_id, &categories);
 
@@ -80,4 +80,44 @@ fn test_add_follower() {
         );
         assert_eq!(reputation_records.first().unwrap().expires_at, None);
     });
+}
+
+#[test]
+fn test_unfollow() {
+    let env = Env::default();
+    let contract_id = env.register(ProductFollowContract, ());
+    let followers = 5;
+    let client = ProductFollowContractClient::new(&env, &contract_id);
+    let product_id = 3u32;
+    let categories = vec![&env, FollowCategory::PriceChange];
+    let mut follower_address: Option<Address> = None;
+    env.mock_all_auths();
+
+    for _ in 0..followers {
+        let follower_address = <Address>::generate(&env);
+        client.follow_product(&follower_address, &product_id, &categories);
+    }
+    env.as_contract(&contract_id, || {
+        let key = symbol_short!("followers");
+        let reputation_records: Vec<FollowData> = env
+            .storage()
+            .persistent()
+            .get(&key)
+            .expect("Reputation history key rating key not found");
+        assert_eq!(reputation_records.len(), followers);
+        follower_address = Some(reputation_records.first().unwrap().user)
+    });
+
+    client.unfollow_product(&follower_address.unwrap(), &product_id);
+
+    env.as_contract(&contract_id, || {
+        let key = symbol_short!("followers");
+        let reputation_records: Vec<FollowData> = env
+            .storage()
+            .persistent()
+            .get(&key)
+            .expect("Reputation history key rating key not found");
+        assert_eq!(reputation_records.len(), followers-1);
+    });
+
 }
