@@ -43,7 +43,7 @@ impl VoteLimiter {
         user_recent_votes = filtered_votes;
 
         // Check daily limit
-        if user_recent_votes.len() >= DAILY_VOTE_LIMIT as u32 {
+        if user_recent_votes.len() >= DAILY_VOTE_LIMIT {
             return Err(Error::DailyLimitReached);
         }
 
