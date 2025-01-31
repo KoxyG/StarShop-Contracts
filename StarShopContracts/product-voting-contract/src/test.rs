@@ -11,8 +11,7 @@ mod tests {
         ranked_products.first()
     }
 
-    /// Test 1: Verify Random Selection**
-    /// This test checks if the winner selection process fairly distributes selections.
+    /// **Test 1: Verify Random Selection Distribution**
     #[test]
     fn test_random_selection_distribution() {
         let env = Env::default();
@@ -28,24 +27,23 @@ mod tests {
         VoteManager::create_product(&env, product3.clone(), Symbol::new(&env, "Product3")).unwrap();
 
         let mut winners = Vec::new(&env);
-
-        // Simulate multiple voting cycles
         for _ in 0..10 {
-            let winner = select_winner(&env);
-            if let Some(w) = winner {
+            if let Some(w) = select_winner(&env) {
                 winners.push_back(w);
             }
         }
 
-        // Ensure at least two different products won at some point (proves distribution)
+        let product1_count = winners.iter().filter(|w| w == &product1).count();
+        let product2_count = winners.iter().filter(|w| w == &product2).count();
+        let product3_count = winners.iter().filter(|w| w == &product3).count();
+
         assert!(
-            winners.contains(&product1) || winners.contains(&product2) || winners.contains(&product3),
+            product1_count > 0 || product2_count > 0 || product3_count > 0,
             "At least one product should have been selected as a winner."
         );
     }
 
-    /// Test 2: Verify Fairness**
-    /// Ensures that each product has a fair chance to win based on votes.
+    /// **Test 2: Verify Selection Fairness**
     #[test]
     fn test_selection_fairness() {
         let env = Env::default();
@@ -60,25 +58,21 @@ mod tests {
 
         let voter1 = Address::generate(&env);
         let voter2 = Address::generate(&env);
+        let voter3 = Address::generate(&env);
 
-        // Both products get an equal number of votes
         VoteManager::cast_vote(&env, product1.clone(), VoteType::Upvote, voter1).unwrap();
-        VoteManager::cast_vote(&env, product2.clone(), VoteType::Upvote, voter2).unwrap();
-
-        RankingCalculator::update_ranking(&env, product1.clone());
-        RankingCalculator::update_ranking(&env, product2.clone());
+        VoteManager::cast_vote(&env, product1.clone(), VoteType::Upvote, voter2).unwrap();
+        VoteManager::cast_vote(&env, product2.clone(), VoteType::Upvote, voter3).unwrap();
 
         let winner = select_winner(&env);
 
-        // Since votes are equal, any product can win
         assert!(
             winner == Some(product1) || winner == Some(product2),
-            "Selection should be fair and not favor one product over another."
+            "Selection should be fair and based on votes."
         );
     }
 
-    /// **✅ Test 3: Validate Winner Uniqueness**
-    /// Ensures the same winner is selected in a single cycle.
+    /// **Test 3: Validate Winner Uniqueness**
     #[test]
     fn test_unique_winner_per_cycle() {
         let env = Env::default();
@@ -94,18 +88,13 @@ mod tests {
         let voter = Address::generate(&env);
         VoteManager::cast_vote(&env, product1.clone(), VoteType::Upvote, voter).unwrap();
 
-        RankingCalculator::update_ranking(&env, product1.clone());
-        RankingCalculator::update_ranking(&env, product2.clone());
-
         let winner1 = select_winner(&env);
         let winner2 = select_winner(&env);
 
-        // Ensure the winner remains the same within a single voting cycle
-        assert_eq!(winner1, winner2, "The winner should be unique for each cycle.");
+        assert_eq!(winner1, winner2, "The winner should be unique within a single voting cycle.");
     }
 
-    /// ** Test 4: Verify Selection Rules**
-    /// Ensures that the product with the most votes wins.
+    /// **Test 4: Verify Selection Rules**
     #[test]
     fn test_selection_rules() {
         let env = Env::default();
@@ -121,20 +110,15 @@ mod tests {
         let voter1 = Address::generate(&env);
         let voter2 = Address::generate(&env);
 
-        // Product 1 gets more votes
         VoteManager::cast_vote(&env, product1.clone(), VoteType::Upvote, voter1.clone()).unwrap();
         VoteManager::cast_vote(&env, product1.clone(), VoteType::Upvote, voter2).unwrap();
         VoteManager::cast_vote(&env, product2.clone(), VoteType::Upvote, voter1).unwrap();
-
-        RankingCalculator::update_ranking(&env, product1.clone());
-        RankingCalculator::update_ranking(&env, product2.clone());
 
         let winner = select_winner(&env);
         assert_eq!(winner, Some(product1), "Product1 should win based on vote count.");
     }
 
-    /// Test 5: Verify Winner Notification**
-    /// Ensures the winner is recorded.
+    /// **Test 5: Verify Winner Notification**
     #[test]
     fn test_winner_notification() {
         let env = Env::default();
@@ -147,14 +131,11 @@ mod tests {
         let voter1 = Address::generate(&env);
         VoteManager::cast_vote(&env, product1.clone(), VoteType::Upvote, voter1).unwrap();
 
-        RankingCalculator::update_ranking(&env, product1.clone());
-
         let winner = select_winner(&env);
         assert_eq!(winner, Some(product1), "The winner should be correctly notified.");
     }
 
     /// **Test 6: Verify Result Recording**
-    /// Ensures vote counts and rankings are properly stored.
     #[test]
     fn test_result_recording() {
         let env = Env::default();
@@ -169,8 +150,6 @@ mod tests {
 
         VoteManager::cast_vote(&env, product1.clone(), VoteType::Upvote, voter1).unwrap();
         VoteManager::cast_vote(&env, product1.clone(), VoteType::Upvote, voter2).unwrap();
-
-        RankingCalculator::update_ranking(&env, product1.clone());
 
         let score = RankingCalculator::get_score(&env, product1.clone());
         assert_eq!(score, 2, "The ranking should reflect the correct number of votes.");
