@@ -158,8 +158,6 @@ impl ProductFollowContract {
     }
 
     pub fn follow_product(env: Env, user: Address, product_id: u32, categories: Vec<FollowCategory>) -> Result<(), Error> {
-        user.require_auth();
-        
         let follow_manager = FollowManager::new(&env);
         follow_manager.add_follower(&user, product_id, &categories)
             .map_err(|e| match e {

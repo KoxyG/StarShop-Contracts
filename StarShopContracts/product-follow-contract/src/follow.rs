@@ -12,7 +12,7 @@ use soroban_sdk::{
 pub struct FollowSystem;
 
 #[allow(dead_code)]
-const DEFAULT_FOLLOW_LIMIT: u32 = 100;
+pub const DEFAULT_FOLLOW_LIMIT: u32 = 100;
 
 pub struct FollowManager<'a> {
     env: &'a Env,
