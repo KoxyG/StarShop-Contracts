@@ -99,6 +99,28 @@ let score = client.get_product_score(&product1_id);
 let trending_products = client.get_trending_products();
 ```
 
+### Compilation in local
+
+To compile the contract, follow these steps:
+
+```sh
+stellar contract build
+```
+
+### Run the test
+
+```bash
+cargo test  
+```
+Output
+```bash
+running 1 test
+test test::test ... ok 
+```
+
+
+
+
 ## 📚 References
 - [Soroban Official Guide](https://soroban.stellar.org/docs/)
 - [Rust Programming Language](https://doc.rust-lang.org/book/)
