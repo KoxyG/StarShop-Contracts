@@ -2,14 +2,18 @@
 
 ## Overview
 
-The **Payment Contract** is a Soroban smart contract designed to handle financial transactions securely while providing robust administrative controls, dispute resolution, and refund mechanisms. This contract ensures that all transactions adhere to security protocols and prevents unauthorized access or fraudulent activity.
+The **Payment Contract** is a smart contract designed to manage administrative control and upgrades for a transaction-based system. It serves as the foundation for handling payments, disputes, and refunds by allowing an administrator to initialize the contract, manage upgrades, and transfer ownership.
 
+The contract integrates with other modules such as `DisputeContract`, `RefundContract`, and `TransactionContract`, which collectively form a robust payment system.
 This contract is modular and consists of four primary components:
 
-- **PaymentContract**: Responsible for contract initialization, upgrades, and administrative control.
-- **TransactionContract**: Manages deposits and transfers between users.
-- **RefundContract**: Provides a mechanism for issuing refunds securely.
-- **DisputeContract**: Resolves conflicts between parties via an arbitrator.
+## Purpose
+
+The **Payment Contract** is primarily responsible for:
+- Initializing the contract and setting an administrator.
+- Allowing the administrator to upgrade the contract with new WASM code.
+- Providing a mechanism to retrieve the current administrator.
+- Enabling the transfer of administrative rights to a new address.
 
 ## Features
 
@@ -18,46 +22,61 @@ This contract is modular and consists of four primary components:
 - **Dispute Resolution**: Implements arbitration logic to fairly resolve disputes.
 - **Refund Management**: Facilitates the reversal of transactions when necessary.
 - **Event Emission**: Logs significant contract interactions for transparency.
+- 
 
 ## Contract Functions
 
-### Payment Contract
+### 1. Initialization (`initialize`)
+**Function Signature:**
+```pub fn initialize(env: Env, admin: Address) -> Result<(), PaymentError>```
+**Description:**
+- This function initializes the contract by setting an administrator.
+- It ensures that the contract is not already initialized.
+- The `admin` address is required to authenticate itself before being stored as the contract administrator.
+- Once set, an event (`init`) is published.
 
-#### `initialize(env: Env, admin: Address) -> Result<(), PaymentError>`
+### 2. Upgrading Contract (`upgrade`)
+**Function Signature:**
+```pub fn upgrade(env: Env, new_wasm_hash: BytesN<32>) -> Result<(), PaymentError>```
 
-Initializes the contract and assigns an admin address. Ensures the contract is only initialized once.
+**Description:**
+- This function allows the admin to update the contract with new WASM code.
+- The admin must authenticate before proceeding.
+- After a successful upgrade, an event (`upgrade`) is published.
 
-#### `upgrade(env: Env, new_wasm_hash: BytesN<32>) -> Result<(), PaymentError>`
+### 3. Retrieve Admin (`get_admin`)
+**Function Signature:**
+```pub fn get_admin(env: Env) -> Result<Address, PaymentError>```
 
-Allows the contract administrator to deploy an upgraded version of the contract.
+**Description:**
+- Retrieves the currently assigned administrator address.
+- Returns an error if the contract is not initialized.
 
-#### `get_admin(env: Env) -> Result<Address, PaymentError>`
+### 4. Transfer Admin Rights (`transfer_admin`)
+**Function Signature:**
+```pub fn transfer_admin(env: Env, new_admin: Address) -> Result<(), PaymentError>```
 
-Retrieves the current admin’s address.
+**Description:**
+- Allows the current admin to transfer administrative rights to a new address.
+- Both the current and new admin must authenticate before the transfer.
+- Upon success, an event (`adm_xfer`) is published.
 
-#### `transfer_admin(env: Env, new_admin: Address) -> Result<(), PaymentError>`
+---
 
-Transfers contract administrative control to another address after authentication.
+## Contract Structure
+The contract is organizde into several modules: 
 
-### Transaction Contract
+```
+src/
+├── lib.rs         # Main contract implementation
+├── dispute.rs     # Handles transaction disputes and resolution logic
+├── refund.rs      # Manages refund processing and conditions
+├── transaction.rs # Implements payment processing and limits
+```
 
-#### `process_deposit(env: Env, token_id: Address, signer: Address, to: Address, amount: i128) -> Result<(), TransactionError>`
 
-Handles deposits by transferring tokens from a signer to a designated recipient.
-
-### Refund Contract
-
-#### `process_refund(env: Env, token_id: Address, signer: Address, to: Address, refund_amount: i128) -> Result<(), RefundError>`
-
-Executes a refund process ensuring the sender has the necessary balance.
-
-### Dispute Contract
-
-#### `resolve_dispute(env: Env, token_id: Address, arbitrator: Address, buyer: Address, seller: Address, refund_amount: i128, decision: DisputeDecision) -> Result<(), DisputeError>`
-
-Allows an arbitrator to make a binding decision in a financial dispute, either refunding the buyer or paying the seller.
-
-## Setup and Deployment
+## Installation and Deployment
+Ensure you have **Rust** and **Soroban CLI** installed.
 
 ### Prerequisites
 
@@ -96,7 +115,7 @@ Using Soroban CLI, invoke contract functions:
 soroban contract invoke --id <contract_id> --fn get_admin
 ```
 
-## Error Handling
+<!-- ## Error Handling
 
 ### Payment Errors
 
@@ -123,8 +142,11 @@ soroban contract invoke --id <contract_id> --fn get_admin
 - **InsufficientFunds**: The arbitrator does not have sufficient balance to execute a resolution.
 - **TransferFailed**: Funds transfer failed while executing a dispute resolution.
 - **InvalidAmount**: Refund amount in the dispute process is not valid.
-- **UnauthorizedAccess**: Unauthorized entity attempted to resolve a dispute.
+- **UnauthorizedAccess**: Unauthorized entity attempted to resolve a dispute. -->
+
+## References
+- [Soroban Official Guide](https://soroban.stellar.org/docs/)
+- [Rust Programming Language](https://doc.rust-lang.org/book/)
 
 ## Conclusion
-
-This contract ensures the integrity of financial transactions while allowing for controlled administrative functions and dispute resolution. By implementing robust security measures, the contract guarantees safe, transparent, and fair financial operations within the Soroban ecosystem.
+The **Payment Contract** plays a crucial role in managing administrative privileges within the payment system. It ensures security by enforcing authentication on key actions like initialization, upgrades, and admin transfers. Properly setting up this contract is essential for the smooth operation of the overall payment platform.
