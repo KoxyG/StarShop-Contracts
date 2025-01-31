@@ -5,6 +5,7 @@ pub mod vote;
 pub mod ranking;
 pub mod limits;
 pub mod types;
+pub mod test;
 
 use types::{VoteType, Error};
 use vote::VoteManager;
