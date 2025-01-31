@@ -21,7 +21,8 @@ impl AlertOperations for AlertSystem {
 
             // Check if user is following for price changes
             if let Some(_follow) = follows.iter().find(|f| {
-                u128::from(f.product_id) == product_id && f.categories.contains(&FollowCategory::PriceChange)
+                u128::from(f.product_id) == product_id
+                    && f.categories.contains(&FollowCategory::PriceChange)
             }) {
                 // Log the price change event
                 let event = EventLog {
@@ -50,7 +51,8 @@ impl AlertOperations for AlertSystem {
                 .unwrap_or_else(|| Vec::new(&env));
 
             if let Some(_follow) = follows.iter().find(|f| {
-                u128::from(f.product_id) == product_id && f.categories.contains(&FollowCategory::Restock)
+                u128::from(f.product_id) == product_id
+                    && f.categories.contains(&FollowCategory::Restock)
             }) {
                 let event = EventLog {
                     product_id,
@@ -78,7 +80,8 @@ impl AlertOperations for AlertSystem {
                 .unwrap_or_else(|| Vec::new(&env));
 
             if let Some(_follow) = follows.iter().find(|f| {
-                u128::from(f.product_id) == product_id && f.categories.contains(&FollowCategory::SpecialOffer)
+                u128::from(f.product_id) == product_id
+                    && f.categories.contains(&FollowCategory::SpecialOffer)
             }) {
                 let event = EventLog {
                     product_id,
@@ -117,7 +120,10 @@ impl AlertSystem {
                 .persistent()
                 .get::<DataKeys, Vec<FollowData>>(&follow_list_key)
             {
-                if follows.iter().any(|f| u128::from(f.product_id) == product_id) {
+                if follows
+                    .iter()
+                    .any(|f| u128::from(f.product_id) == product_id)
+                {
                     following_users.push_back(user.clone());
                 }
             }
@@ -128,10 +134,12 @@ impl AlertSystem {
 
     // Rate limiting
     fn check_rate_limit(env: &Env, user: &Address) -> bool {
-        let last_notification = env.storage().persistent()
+        let last_notification = env
+            .storage()
+            .persistent()
             .get::<_, u64>(&DataKeys::LastNotification(user.clone()))
             .unwrap_or(0);
-        
+
         let current_time = env.ledger().timestamp();
         current_time - last_notification > 3600
     }
@@ -140,11 +148,11 @@ impl AlertSystem {
         if !Self::check_rate_limit(env, &user) {
             return Ok(());
         }
-        
+
         // Update the last notification timestamp
         env.storage().persistent().set(
             &DataKeys::LastNotification(user.clone()),
-            &env.ledger().timestamp()
+            &env.ledger().timestamp(),
         );
 
         let history_key = DataKeys::NotificationHistory(user);

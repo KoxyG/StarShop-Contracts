@@ -1,14 +1,17 @@
-use soroban_sdk::contractimpl;
-use soroban_sdk::{Env, Address};
-use crate::NFTContractClient;
 use crate::NFTContractArgs;
+use crate::NFTContractClient;
+use soroban_sdk::contractimpl;
+use soroban_sdk::{Address, Env};
 
 #[contractimpl]
 impl super::NFTContract {
     pub fn transfer_nft(env: Env, from: Address, to: Address, token_id: u32) {
         from.require_auth();
 
-        let mut nft: crate::NFTDetail = env.storage().persistent().get(&token_id)
+        let mut nft: crate::NFTDetail = env
+            .storage()
+            .persistent()
+            .get(&token_id)
             .expect("NFT not exist");
 
         if nft.owner != from {
@@ -22,7 +25,10 @@ impl super::NFTContract {
     pub fn burn_nft(env: Env, owner: Address, token_id: u32) {
         owner.require_auth();
 
-        let nft: crate::NFTDetail = env.storage().persistent().get(&token_id)
+        let nft: crate::NFTDetail = env
+            .storage()
+            .persistent()
+            .get(&token_id)
             .expect("NFT not exist");
 
         if nft.owner != owner {

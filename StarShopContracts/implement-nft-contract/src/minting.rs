@@ -1,7 +1,7 @@
-use soroban_sdk::{contractimpl, Address, Env, String, Vec};
-use crate::{NFTMetadata, NFTDetail, COUNTER_KEY};
-use crate::NFTContractClient;
 use crate::NFTContractArgs;
+use crate::NFTContractClient;
+use crate::{NFTDetail, NFTMetadata, COUNTER_KEY};
+use soroban_sdk::{contractimpl, Address, Env, String, Vec};
 
 #[contractimpl]
 impl super::NFTContract {
@@ -12,7 +12,6 @@ impl super::NFTContract {
         description: String,
         attributes: Vec<String>,
     ) -> u32 {
-        
         to.require_auth();
 
         let mut current_id: u32 = env.storage().instance().get(&COUNTER_KEY).unwrap();

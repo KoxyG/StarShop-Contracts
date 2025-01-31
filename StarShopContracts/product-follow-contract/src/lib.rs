@@ -1,14 +1,11 @@
 #![no_std]
-use soroban_sdk::{
-    contract, contractimpl, Address, BytesN, Env, Vec,
-    symbol_short, contracterror,
-};
+use soroban_sdk::{contract, contracterror, contractimpl, symbol_short, Address, BytesN, Env, Vec};
 
+use crate::alerts::AlertSystem;
 use crate::datatype::Error;
 use crate::follow::FollowManager;
-use crate::notification::NotificationSystem;
-use crate::alerts::AlertSystem;
 use crate::interface::{AlertOperations, NotificationOperations};
+use crate::notification::NotificationSystem;
 
 mod alerts;
 mod datatype;
@@ -20,8 +17,7 @@ mod notification;
 mod test;
 
 pub use crate::datatype::{
-    FollowCategory, FollowData, FollowError,
-    NotificationPreferences, EventLog,
+    EventLog, FollowCategory, FollowData, FollowError, NotificationPreferences,
 };
 pub use crate::interface::FollowOperations;
 
@@ -36,63 +32,39 @@ pub enum ProductFollowError {
 pub trait ProductFollowTrait {
     // Core follow functionality
     fn follow_product(
-        env: Env, 
-        user: Address, 
-        product_id: u32, 
-        categories: Vec<FollowCategory>
+        env: Env,
+        user: Address,
+        product_id: u32,
+        categories: Vec<FollowCategory>,
     ) -> Result<(), Error>;
-    
-    fn unfollow_product(
-        env: Env, 
-        user: Address, 
-        product_id: u32
-    ) -> Result<(), Error>;
-    
-    fn is_following(
-        env: Env, 
-        user: Address, 
-        product_id: u32
-    ) -> bool;
-    
+
+    fn unfollow_product(env: Env, user: Address, product_id: u32) -> Result<(), Error>;
+
+    fn is_following(env: Env, user: Address, product_id: u32) -> bool;
+
     // Alert functionality
-    fn notify_price_change(
-        env: Env, 
-        product_id: u32, 
-        new_price: u64
-    ) -> Result<(), Error>;
-    
-    fn notify_restock(
-        env: Env, 
-        product_id: u32
-    ) -> Result<(), Error>;
-    
-    fn notify_special_offer(
-        env: Env, 
-        product_id: u32
-    ) -> Result<(), Error>;
-    
+    fn notify_price_change(env: Env, product_id: u32, new_price: u64) -> Result<(), Error>;
+
+    fn notify_restock(env: Env, product_id: u32) -> Result<(), Error>;
+
+    fn notify_special_offer(env: Env, product_id: u32) -> Result<(), Error>;
+
     // Notification management
     fn set_notification_preferences(
-        env: Env, 
-        user: Address, 
-        preferences: NotificationPreferences
+        env: Env,
+        user: Address,
+        preferences: NotificationPreferences,
     ) -> Result<(), Error>;
-    
+
     fn get_notification_preferences(
-        env: Env, 
-        user: Address
+        env: Env,
+        user: Address,
     ) -> Result<NotificationPreferences, Error>;
-    
-    fn get_notification_history(
-        env: Env, 
-        user: Address
-    ) -> Result<Vec<EventLog>, Error>;
-    
+
+    fn get_notification_history(env: Env, user: Address) -> Result<Vec<EventLog>, Error>;
+
     // Utility functions
-    fn get_followers(
-        env: Env, 
-        product_id: u32
-    ) -> Vec<Address>;
+    fn get_followers(env: Env, product_id: u32) -> Vec<Address>;
 }
 
 #[contract]
@@ -105,63 +77,73 @@ impl ProductFollowContract {
         if env.storage().instance().has(&symbol_short!("admin")) {
             return Err(ProductFollowError::AlreadyInitialized);
         }
-        
+
         admin.require_auth();
-        env.storage().instance().set(&symbol_short!("admin"), &admin);
-        
-        env.events().publish(
-            (symbol_short!("init"),),
-            (admin,),
-        );
-        
+        env.storage()
+            .instance()
+            .set(&symbol_short!("admin"), &admin);
+
+        env.events().publish((symbol_short!("init"),), (admin,));
+
         Ok(())
     }
 
     /// Upgrades the contract with new WASM code
     pub fn upgrade(env: Env, new_wasm_hash: BytesN<32>) -> Result<(), ProductFollowError> {
-        let admin: Address = env.storage().instance().get(&symbol_short!("admin"))
+        let admin: Address = env
+            .storage()
+            .instance()
+            .get(&symbol_short!("admin"))
             .ok_or(ProductFollowError::NotInitialized)?;
-        
+
         admin.require_auth();
-        env.deployer().update_current_contract_wasm(new_wasm_hash.clone());
-        
-        env.events().publish(
-            (symbol_short!("upgrade"),),
-            (admin, new_wasm_hash),
-        );
-        
+        env.deployer()
+            .update_current_contract_wasm(new_wasm_hash.clone());
+
+        env.events()
+            .publish((symbol_short!("upgrade"),), (admin, new_wasm_hash));
+
         Ok(())
     }
 
     /// Returns the current admin address
     pub fn get_admin(env: Env) -> Result<Address, ProductFollowError> {
-        env.storage().instance().get(&symbol_short!("admin"))
+        env.storage()
+            .instance()
+            .get(&symbol_short!("admin"))
             .ok_or(ProductFollowError::NotInitialized)
     }
 
     /// Transfers admin rights to a new address
     pub fn transfer_admin(env: Env, new_admin: Address) -> Result<(), ProductFollowError> {
-        let current_admin: Address = env.storage().instance().get(&symbol_short!("admin"))
+        let current_admin: Address = env
+            .storage()
+            .instance()
+            .get(&symbol_short!("admin"))
             .ok_or(ProductFollowError::NotInitialized)?;
-        
+
         current_admin.require_auth();
         new_admin.require_auth();
-        
-        env.storage().instance().set(&symbol_short!("admin"), &new_admin);
-        
-        env.events().publish(
-            (symbol_short!("adm_xfer"),),
-            (current_admin, new_admin),
-        );
-        
+
+        env.storage()
+            .instance()
+            .set(&symbol_short!("admin"), &new_admin);
+
+        env.events()
+            .publish((symbol_short!("adm_xfer"),), (current_admin, new_admin));
+
         Ok(())
     }
 
-    pub fn follow_product(env: Env, user: Address, product_id: u32, categories: Vec<FollowCategory>) -> Result<(), Error> {
-        user.require_auth();
-        
+    pub fn follow_product(
+        env: Env,
+        user: Address,
+        product_id: u32,
+        categories: Vec<FollowCategory>,
+    ) -> Result<(), Error> {
         let follow_manager = FollowManager::new(&env);
-        follow_manager.add_follower(&user, product_id, &categories)
+        follow_manager
+            .add_follower(&user, product_id, &categories)
             .map_err(|e| match e {
                 FollowError::AlreadyFollowing => Error::AlreadyFollowing,
                 _ => Error::InvalidProduct,
@@ -169,10 +151,9 @@ impl ProductFollowContract {
     }
 
     pub fn unfollow_product(env: Env, user: Address, product_id: u32) -> Result<(), Error> {
-        user.require_auth();
-        
         let follow_manager = FollowManager::new(&env);
-        follow_manager.remove_follower(&user, product_id)
+        follow_manager
+            .remove_follower(&user, product_id)
             .map_err(|e| match e {
                 FollowError::NotFollowing => Error::NotFollowing,
                 _ => Error::InvalidProduct,
@@ -199,12 +180,23 @@ impl ProductFollowContract {
             .map_err(|_| Error::NotificationFailed)
     }
 
-    pub fn set_notification_preferences(env: Env, user: Address, preferences: NotificationPreferences) -> Result<(), Error> {
-        <NotificationSystem as NotificationOperations>::set_notification_preferences(env, user, preferences)
-            .map_err(|_| Error::NotificationFailed)
+    pub fn set_notification_preferences(
+        env: Env,
+        user: Address,
+        preferences: NotificationPreferences,
+    ) -> Result<(), Error> {
+        <NotificationSystem as NotificationOperations>::set_notification_preferences(
+            env,
+            user,
+            preferences,
+        )
+        .map_err(|_| Error::NotificationFailed)
     }
 
-    pub fn get_notification_preferences(env: Env, user: Address) -> Result<NotificationPreferences, Error> {
+    pub fn get_notification_preferences(
+        env: Env,
+        user: Address,
+    ) -> Result<NotificationPreferences, Error> {
         <NotificationSystem as NotificationOperations>::get_notification_preferences(env, user)
             .map_err(|_| Error::NotificationFailed)
     }
