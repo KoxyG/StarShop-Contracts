@@ -1,7 +1,7 @@
-use soroban_sdk::contractimpl;
-use soroban_sdk::{Env, Address, String, Vec};
-use crate::NFTContractClient;
 use crate::NFTContractArgs;
+use crate::NFTContractClient;
+use soroban_sdk::contractimpl;
+use soroban_sdk::{Address, Env, String, Vec};
 
 #[contractimpl]
 impl super::NFTContract {
@@ -15,7 +15,10 @@ impl super::NFTContract {
     ) {
         Self::check_admin(&env, &admin);
 
-        let mut nft: crate::NFTDetail = env.storage().persistent().get(&token_id)
+        let mut nft: crate::NFTDetail = env
+            .storage()
+            .persistent()
+            .get(&token_id)
             .expect("NFT not exist");
 
         nft.metadata = crate::NFTMetadata {
@@ -28,7 +31,10 @@ impl super::NFTContract {
     }
 
     pub fn get_metadata(env: Env, token_id: u32) -> crate::NFTMetadata {
-        let nft: crate::NFTDetail = env.storage().persistent().get(&token_id)
+        let nft: crate::NFTDetail = env
+            .storage()
+            .persistent()
+            .get(&token_id)
             .expect("NFT not exist");
         nft.metadata
     }

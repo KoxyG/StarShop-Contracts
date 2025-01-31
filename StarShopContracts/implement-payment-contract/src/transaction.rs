@@ -1,5 +1,5 @@
-use soroban_sdk::{contract, contractimpl, Address, Env, symbol_short, contracterror};
 use soroban_sdk::token::Client as TokenClient;
+use soroban_sdk::{contract, contracterror, contractimpl, symbol_short, Address, Env};
 
 #[contracterror]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
@@ -20,7 +20,7 @@ impl TransactionContract {
         token_id: Address,
         signer: Address,
         to: Address,
-        amount_to_deposit: i128
+        amount_to_deposit: i128,
     ) -> Result<(), TransactionError> {
         // Check authorization
         signer.require_auth();
@@ -46,10 +46,8 @@ impl TransactionContract {
         token.transfer(&signer, &to, &amount_to_deposit);
 
         // Emit event
-        e.events().publish(
-            (symbol_short!("deposit"),),
-            (signer, to, amount_to_deposit),
-        );
+        e.events()
+            .publish((symbol_short!("deposit"),), (signer, to, amount_to_deposit));
 
         Ok(())
     }

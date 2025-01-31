@@ -1,7 +1,4 @@
-use crate::datatype::{
-    FollowCategory, FollowData, FollowError,
-    NotificationPreferences, EventLog,
-};
+use crate::datatype::{EventLog, FollowCategory, FollowData, FollowError, NotificationPreferences};
 use soroban_sdk::{Address, Env, Vec};
 
 /// Handles product follow operations

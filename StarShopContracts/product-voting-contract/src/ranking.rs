@@ -1,6 +1,6 @@
-use soroban_sdk::{symbol_short, Env, Map, Symbol, Vec};
-use crate::vote::VoteManager;
 use crate::types::VoteType;
+use crate::vote::VoteManager;
+use soroban_sdk::{symbol_short, Env, Map, Symbol, Vec};
 
 pub struct RankingCalculator;
 
@@ -9,24 +9,40 @@ const TRENDING_WINDOW: u64 = 48 * 60 * 60; // 48 hours in seconds
 impl RankingCalculator {
     pub fn init(env: &Env) {
         let rankings: Map<Symbol, i32> = Map::new(env);
-        env.storage().instance().set(&symbol_short!("rankings"), &rankings);
+        env.storage()
+            .instance()
+            .set(&symbol_short!("rankings"), &rankings);
     }
 
     pub fn update_ranking(env: &Env, product_id: Symbol) {
         let score = Self::calculate_score(env, product_id.clone());
-        
-        let mut rankings: Map<Symbol, i32> = env.storage().instance().get(&symbol_short!("rankings")).unwrap();
+
+        let mut rankings: Map<Symbol, i32> = env
+            .storage()
+            .instance()
+            .get(&symbol_short!("rankings"))
+            .unwrap();
         rankings.set(product_id, score);
-        env.storage().instance().set(&symbol_short!("rankings"), &rankings);
+        env.storage()
+            .instance()
+            .set(&symbol_short!("rankings"), &rankings);
     }
 
     pub fn get_score(env: &Env, product_id: Symbol) -> i32 {
-        let rankings: Map<Symbol, i32> = env.storage().instance().get(&symbol_short!("rankings")).unwrap();
+        let rankings: Map<Symbol, i32> = env
+            .storage()
+            .instance()
+            .get(&symbol_short!("rankings"))
+            .unwrap();
         rankings.get(product_id).unwrap_or(0)
     }
 
     pub fn get_trending(env: &Env) -> Vec<Symbol> {
-        let rankings: Map<Symbol, i32> = env.storage().instance().get(&symbol_short!("rankings")).unwrap();
+        let rankings: Map<Symbol, i32> = env
+            .storage()
+            .instance()
+            .get(&symbol_short!("rankings"))
+            .unwrap();
         let mut result = Vec::new(env);
 
         // Convert to vector of tuples
@@ -56,9 +72,8 @@ impl RankingCalculator {
     }
 
     fn calculate_score(env: &Env, product_id: Symbol) -> i32 {
-        let product = VoteManager::get_product(env, product_id)
-            .expect("Product should exist");
-            
+        let product = VoteManager::get_product(env, product_id).expect("Product should exist");
+
         let now = env.ledger().timestamp();
         let age_hours = (now - product.created_at) / 3600;
 

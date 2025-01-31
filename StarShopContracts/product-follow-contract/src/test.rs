@@ -13,7 +13,11 @@ fn test_panic_follower_not_auth() {
     let client = ProductFollowContractClient::new(&env, &contract_id);
     let follower_address = <Address>::generate(&env);
 
-    client.follow_product(&follower_address, &3, &vec![&env, FollowCategory::PriceChange]);
+    client.follow_product(
+        &follower_address,
+        &3,
+        &vec![&env, FollowCategory::PriceChange],
+    );
 }
 
 #[test]
@@ -41,11 +45,10 @@ fn test_panic_follow_limit_exceeded() {
     let product_id = 3u32;
     let categories = vec![&env, FollowCategory::PriceChange];
 
-    for _ in 0..DEFAULT_FOLLOW_LIMIT+1{
+    for _ in 0..DEFAULT_FOLLOW_LIMIT + 1 {
         let follower_address = <Address>::generate(&env);
         client.follow_product(&follower_address, &product_id, &categories);
     }
-
 }
 
 #[test]
@@ -71,7 +74,10 @@ fn test_add_follower() {
         assert_eq!(reputation_records.first().unwrap().user, follower_address);
         assert_eq!(reputation_records.first().unwrap().product_id, product_id);
         assert_eq!(reputation_records.first().unwrap().categories, categories);
-        assert_eq!(reputation_records.first().unwrap().timestamp, env.ledger().timestamp());
+        assert_eq!(
+            reputation_records.first().unwrap().timestamp,
+            env.ledger().timestamp()
+        );
         assert_eq!(reputation_records.first().unwrap().expires_at, None);
-        });
+    });
 }

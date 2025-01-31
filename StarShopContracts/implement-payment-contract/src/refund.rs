@@ -1,5 +1,5 @@
-use soroban_sdk::{contract, contractimpl, Address, Env, symbol_short, contracterror};
 use soroban_sdk::token::Client as TokenClient;
+use soroban_sdk::{contract, contracterror, contractimpl, symbol_short, Address, Env};
 
 #[contracterror]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
@@ -20,7 +20,7 @@ impl RefundContract {
         token_id: Address,
         signer: Address,
         to: Address,
-        refund_amount: i128
+        refund_amount: i128,
     ) -> Result<(), RefundError> {
         // Check authorization
         signer.require_auth();
@@ -46,10 +46,8 @@ impl RefundContract {
         token.transfer(&signer, &to, &refund_amount);
 
         // Emit event
-        e.events().publish(
-            (symbol_short!("refund"),),
-            (signer, to, refund_amount),
-        );
+        e.events()
+            .publish((symbol_short!("refund"),), (signer, to, refund_amount));
 
         Ok(())
     }

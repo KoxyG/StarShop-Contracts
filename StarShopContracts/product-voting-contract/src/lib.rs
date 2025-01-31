@@ -1,20 +1,25 @@
 #![no_std]
-use soroban_sdk::{contract, contractimpl, Symbol, Env, Vec, Address};
+use soroban_sdk::{contract, contractimpl, Address, Env, Symbol, Vec};
 
-pub mod vote;
-pub mod ranking;
 pub mod limits;
+pub mod ranking;
 pub mod types;
+pub mod vote;
 
-use types::{VoteType, Error};
-use vote::VoteManager;
-use ranking::RankingCalculator;
 use limits::VoteLimiter;
+use ranking::RankingCalculator;
+use types::{Error, VoteType};
+use vote::VoteManager;
 
 pub trait ProductVotingTrait {
     fn init(env: Env);
     fn create_product(env: Env, id: Symbol, name: Symbol) -> Result<(), Error>;
-    fn cast_vote(env: Env, product_id: Symbol, vote_type: VoteType, voter: Address) -> Result<(), Error>;
+    fn cast_vote(
+        env: Env,
+        product_id: Symbol,
+        vote_type: VoteType,
+        voter: Address,
+    ) -> Result<(), Error>;
     fn get_product_score(env: Env, product_id: Symbol) -> i32;
     fn get_trending_products(env: Env) -> Vec<Symbol>;
 }
@@ -34,16 +39,21 @@ impl ProductVotingTrait for ProductVoting {
         VoteManager::create_product(&env, id, name)
     }
 
-    fn cast_vote(env: Env, product_id: Symbol, vote_type: VoteType, voter: Address) -> Result<(), Error> {
+    fn cast_vote(
+        env: Env,
+        product_id: Symbol,
+        vote_type: VoteType,
+        voter: Address,
+    ) -> Result<(), Error> {
         // Check vote limits first
         VoteLimiter::check_limits(&env, &voter)?;
-        
+
         // Cast the vote - clone product_id since we'll use it again
         VoteManager::cast_vote(&env, product_id.clone(), vote_type, voter)?;
-        
+
         // Update rankings
         RankingCalculator::update_ranking(&env, product_id);
-        
+
         Ok(())
     }
 

@@ -1,5 +1,8 @@
-use soroban_sdk::{contract, contractimpl, Address, Env, symbol_short, contracterror, Val, IntoVal, TryFromVal, TryIntoVal, ConversionError};
 use soroban_sdk::token::Client as TokenClient;
+use soroban_sdk::{
+    contract, contracterror, contractimpl, symbol_short, Address, ConversionError, Env, IntoVal,
+    TryFromVal, TryIntoVal, Val,
+};
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 #[repr(u32)]
