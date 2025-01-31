@@ -3,11 +3,12 @@ use soroban_sdk::{contract, contracterror, contractimpl, symbol_short, Address, 
 
 mod dispute;
 mod refund;
+
 #[cfg(test)]
 mod test;
 mod transaction;
 
-pub use dispute::{DisputeContract, DisputeDecision, DisputeError};
+pub use dispute::{DisputeContract, DisputeContractClient, DisputeDecision, DisputeError};
 pub use refund::{RefundContract, RefundError};
 pub use transaction::{TransactionContract, TransactionError};
 
