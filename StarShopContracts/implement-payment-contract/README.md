@@ -115,35 +115,6 @@ Using Soroban CLI, invoke contract functions:
 soroban contract invoke --id <contract_id> --fn get_admin
 ```
 
-<!-- ## Error Handling
-
-### Payment Errors
-
-- **NotInitialized**: The contract has not been initialized.
-- **AlreadyInitialized**: The contract is already initialized and cannot be reinitialized.
-- **UnauthorizedAccess**: The caller does not have the necessary permissions to perform the operation.
-
-### Transaction Errors
-
-- **InsufficientFunds**: The transaction initiator lacks the required balance.
-- **TransferFailed**: The transfer operation was unsuccessful.
-- **InvalidAmount**: The transaction amount is invalid (e.g., negative or zero).
-- **UnauthorizedAccess**: Unauthorized entity attempted to initiate a transaction.
-
-### Refund Errors
-
-- **InsufficientFunds**: The sender lacks sufficient balance for the refund.
-- **TransferFailed**: Refund transaction failed due to unforeseen errors.
-- **InvalidAmount**: The refund amount must be a positive integer.
-- **UnauthorizedAccess**: Unauthorized entity attempted a refund.
-
-### Dispute Errors
-
-- **InsufficientFunds**: The arbitrator does not have sufficient balance to execute a resolution.
-- **TransferFailed**: Funds transfer failed while executing a dispute resolution.
-- **InvalidAmount**: Refund amount in the dispute process is not valid.
-- **UnauthorizedAccess**: Unauthorized entity attempted to resolve a dispute. -->
-
 ## References
 - [Soroban Official Guide](https://soroban.stellar.org/docs/)
 - [Rust Programming Language](https://doc.rust-lang.org/book/)
