@@ -117,7 +117,6 @@ fn test_unfollow() {
             .persistent()
             .get(&key)
             .expect("Reputation history key rating key not found");
-        assert_eq!(reputation_records.len(), followers-1);
+        assert_eq!(reputation_records.len(), followers - 1);
     });
-
 }
