@@ -11,6 +11,9 @@ use ranking::RankingCalculator;
 use types::{Error, VoteType};
 use vote::VoteManager;
 
+#[cfg(test)]
+mod test;
+
 pub trait ProductVotingTrait {
     fn init(env: Env);
     fn create_product(env: Env, id: Symbol, name: Symbol) -> Result<(), Error>;
