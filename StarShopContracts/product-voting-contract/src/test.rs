@@ -1,97 +1,158 @@
-#![cfg(test)]
+#[cfg(test)]
+mod tests {
 
-use soroban_sdk::{symbol_short, testutils::Address as _, Address, Env, Map, Symbol};
+    use crate::types::VoteType;
+    use crate::{ProductVoting, ProductVotingClient};
+    use soroban_sdk::{
+        testutils::Address as _,
+        testutils::{Ledger, LedgerInfo},
+        Address, Env, Symbol,
+    };
 
-use crate::types::Product;
-use super::*;
+    const DAILY_VOTE_LIMIT: u32 = 10;
+    const MIN_ACCOUNT_AGE: u64 = 7 * 24 * 60 * 60; // 7 days in seconds
 
+    #[test]
+    fn test_create_product() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let contract_id = env.register(ProductVoting, ());
+        let client = ProductVotingClient::new(&env, &contract_id);
 
-#[test]
-fn test_raffle_initialization() {
-    let env = Env::default();
-    ProductVoting::init(env.clone());
+        let id = Symbol::new(&env, "product1");
+        let name = Symbol::new(&env, "Product_1");
+        client.init();
 
-    // Verify initial state
-    let products: Map<Symbol, Product> = env.storage().instance().get(&symbol_short!("products")).unwrap();
-    assert!(products.is_empty());
-}
+        let result = client.try_create_product(&id, &name);
+        assert!(result.is_ok(), "create_product failed with an error");
+        let score = client.get_product_score(&id);
+        assert_eq!(score, 0)
+    }
 
-#[test]
-fn test_create_product() {
-    let env = Env::default();
-    ProductVoting::init(env.clone());
+    #[test]
+    fn test_duplicate_product_creation() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let contract_id = env.register(ProductVoting, ());
+        let client = ProductVotingClient::new(&env, &contract_id);
 
-    let product_id = symbol_short!("product1");
-    let product_name = symbol_short!("Product1");
+        let id = Symbol::new(&env, "product1");
+        let name = Symbol::new(&env, "Product_1");
 
-    ProductVoting::create_product(env.clone(), product_id.clone(), product_name.clone()).unwrap();
+        // First creation should succeed
+        client.create_product(&id, &name);
 
-    // Verify product creation
-    let products: Map<Symbol, Product> = env.storage().instance().get(&symbol_short!("products")).unwrap();
-    let product = products.get(product_id.clone()).unwrap();
-    assert_eq!(product.id, product_id);
-    assert_eq!(product.name, product_name);
-}
+        // Second creation should fail with ProductExists
+        let result = client.try_create_product(&id, &name);
 
-#[test]
-fn test_cast_vote() {
-    let env = Env::default();
-    ProductVoting::init(env.clone());
+        // Ensure the result is an error
+        assert!(result.is_err(), "Expected error, but got Ok");
+    }
 
-    let product_id = symbol_short!("product1");
-    let product_name = symbol_short!("Product1");
-    ProductVoting::create_product(env.clone(), product_id.clone(), product_name.clone()).unwrap();
+    #[test]
+    fn test_daily_vote_limit() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let contract_id = env.register(ProductVoting, ());
+        let client = ProductVotingClient::new(&env, &contract_id);
 
-    let voter = Address::from_str(&env, "voter1");
-    ProductVoting::cast_vote(env.clone(), product_id.clone(), VoteType::Upvote, voter.clone()).unwrap();
+        let id = Symbol::new(&env, "product1");
+        let name = Symbol::new(&env, "Product_1");
 
-    // Verify vote casting
-    let products: Map<Symbol, Product> = env.storage().instance().get(&symbol_short!("products")).unwrap();
-    let product = products.get(product_id.clone()).unwrap();
-    let vote = product.votes.get(voter.clone()).unwrap();
-    assert_eq!(vote.vote_type, VoteType::Upvote);
-assert_eq!(vote.voter, voter);
-}
+        let voter = Address::generate(&env);
 
-#[test]
-fn test_get_product_score() {
-    let env = Env::default();
-    ProductVoting::init(env.clone());
+        client.init();
 
-    let product_id = symbol_short!("product1");
-    let product_name = symbol_short!("Product1");
-    ProductVoting::create_product(env.clone(), product_id.clone(), product_name.clone()).unwrap();
+        env.ledger().set(LedgerInfo {
+            timestamp: env.ledger().timestamp() + MIN_ACCOUNT_AGE,
+            protocol_version: 22,
+            sequence_number: 100,
+            network_id: [0; 32],
+            base_reserve: 10,
+            min_temp_entry_ttl: 1000,
+            min_persistent_entry_ttl: 1000,
+            max_entry_ttl: 6312000,
+            ..Default::default()
+        });
 
-    let voter = Address::from_str(&env, "voter1");
-    ProductVoting::cast_vote(env.clone(), product_id.clone(), VoteType::Upvote, voter.clone()).unwrap();
+        client.create_product(&id, &name);
 
-    // Verify product score
-    let score = ProductVoting::get_product_score(env.clone(), product_id.clone());
-    assert_eq!(score, 1);
-}
+        for _ in 0..DAILY_VOTE_LIMIT {
+            let result = client.try_cast_vote(&id, &VoteType::Upvote, &voter);
+            assert!(result.is_ok());
+        }
 
-#[test]
-fn test_get_trending_products() {
-    let env = Env::default();
-    ProductVoting::init(env.clone());
+        let result = client.try_cast_vote(&id, &VoteType::Upvote, &voter);
 
-    let product_id1 = symbol_short!("product1");
-    let product_name1 = symbol_short!("Product_1");
-    ProductVoting::create_product(env.clone(), product_id1.clone(), product_name1.clone()).unwrap();
+        assert!(result.is_err(), "Expected error, but got Ok");
+    }
 
-    let product_id2 = symbol_short!("product2");
-    let product_name2 = symbol_short!("Product_2");
-    ProductVoting::create_product(env.clone(), product_id2.clone(), product_name2.clone()).unwrap();
+    #[test]
+    fn test_account_too_new() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let contract_id = env.register(ProductVoting, ());
+        let client = ProductVotingClient::new(&env, &contract_id);
 
-    let voter1 = Address::from_str(&env, "voter1");
-    let voter2 = Address::from_str(&env, "voter2");
-    ProductVoting::cast_vote(env.clone(), product_id1.clone(), VoteType::Upvote, voter1.clone()).unwrap();
-    ProductVoting::cast_vote(env.clone(), product_id2.clone(), VoteType::Upvote, voter2.clone()).unwrap();
-    ProductVoting::cast_vote(env.clone(), product_id2.clone(), VoteType::Upvote, voter1.clone()).unwrap();
+        let id = Symbol::new(&env, "product1");
+        let name = Symbol::new(&env, "Product_1");
 
-    // Verify trending products
-    let trending_products = ProductVoting::get_trending_products(env.clone());
-    assert_eq!(trending_products.len(), 2);
-    assert_eq!(trending_products.get(0).unwrap(), product_id2);
-    assert_eq!(trending_products.get(1).unwrap(), product_id1);
+        let voter = Address::generate(&env);
+
+        client.init();
+
+        client.create_product(&id, &name);
+        let result = client.try_cast_vote(&id, &VoteType::Upvote, &voter);
+
+        assert!(result.is_err(), "Expected error, but got Ok");
+    }
+
+    #[test]
+    fn test_reversal_window_expired() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let contract_id = env.register(ProductVoting, ());
+        let client = ProductVotingClient::new(&env, &contract_id);
+
+        let id = Symbol::new(&env, "product1");
+        let name = Symbol::new(&env, "Product_1");
+
+        let voter = Address::generate(&env);
+
+        client.init();
+
+        env.ledger().set(LedgerInfo {
+            timestamp: env.ledger().timestamp() + MIN_ACCOUNT_AGE,
+            protocol_version: 22,
+            sequence_number: 100,
+            network_id: [0; 32],
+            base_reserve: 10,
+            min_temp_entry_ttl: 1000,
+            min_persistent_entry_ttl: 1000,
+            max_entry_ttl: 6312000,
+            ..Default::default()
+        });
+
+        client.create_product(&id, &name);
+        client.cast_vote(&id, &VoteType::Upvote, &voter);
+
+        // Simulate time passing
+        env.ledger().set(LedgerInfo {
+            timestamp: env.ledger().timestamp() + 24 * 60 * 60 + 1,
+            protocol_version: 22,
+            sequence_number: 100,
+            network_id: [0; 32],
+            base_reserve: 10,
+            min_temp_entry_ttl: 1000,
+            min_persistent_entry_ttl: 1000,
+            max_entry_ttl: 6312000,
+            ..Default::default()
+        });
+
+        // Try casting a downvote after the reversal window has expired
+        let result = client.try_cast_vote(&id, &VoteType::Downvote, &voter);
+
+        // Assert the result is an error
+        assert!(result.is_err(), "Expected error, but got Ok");
+    }
 }
