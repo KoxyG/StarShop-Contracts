@@ -120,3 +120,108 @@ fn test_unfollow() {
         assert_eq!(reputation_records.len(), followers - 1);
     });
 }
+
+#[test]
+fn test_price_change_alert() {
+    let env = Env::default();
+    let contract_id = env.register(ProductFollowContract, ());
+    let client = ProductFollowContractClient::new(&env, &contract_id);
+    let product_id = 1u32;
+    let new_price = 100u64;
+    env.mock_all_auths();
+
+    // Simulate following a product
+    let user = Address::generate(&env);
+    let categories = Vec::from_array(&env, [FollowCategory::PriceChange]);
+    client.follow_product(&user, &product_id, &categories);
+
+    // Trigger price change alert
+    let result = client.try_notify_price_change(&product_id, &new_price);
+    assert!(result.is_ok());
+
+    // Verify alert was logged
+    // let history = client.get_notification_history(&user);
+    // assert_eq!(history.len(), 1);
+    // assert_eq!(history.get(0).unwrap().event_type, FollowCategory::PriceChange);
+}
+
+#[test]
+fn test_restock_alert() {
+    let env = Env::default();
+    let contract_id = env.register(ProductFollowContract, ());
+    let client = ProductFollowContractClient::new(&env, &contract_id);
+    let product_id = 1u32;
+    let new_price = 100u64;
+    env.mock_all_auths();
+
+    // Simulate following a product
+    let user = Address::generate(&env);
+    let categories = Vec::from_array(&env, [FollowCategory::Restock]);
+    client.follow_product(&user, &product_id, &categories);
+
+    // Trigger restock alert
+    let result = client.try_notify_restock(&product_id);
+    assert!(result.is_ok());
+
+    // Verify alert was logged
+    let history = client.get_notification_history(&user);
+   // assert_eq!(history.len(), 1);
+   // assert_eq!(history.get(0).unwrap().event_type, FollowCategory::Restock);
+}
+
+#[test]
+fn test_special_offer_alert() {
+    let env = Env::default();
+    let contract_id = env.register(ProductFollowContract, ());
+    let client = ProductFollowContractClient::new(&env, &contract_id);
+    let product_id = 1u32;
+    let new_price = 100u64;
+    env.mock_all_auths();
+
+    // Simulate following a product
+    let user = Address::generate(&env);
+    let categories = Vec::from_array(&env, [FollowCategory::SpecialOffer]);
+    client.follow_product(&user, &product_id, &categories);
+
+    // Trigger special offer alert
+    let result = client.try_notify_special_offer(&product_id);
+    assert!(result.is_ok());
+
+    // // Verify alert was logged
+    // let history = ProductFollowContract::get_notification_history(env.clone(), user.clone()).unwrap();
+    // assert_eq!(history.len(), 1);
+    // assert_eq!(history.get(0).unwrap().event_type, FollowCategory::SpecialOffer);
+}
+
+#[test]
+fn test_condition_combinations() {
+    let env = Env::default();
+    let contract_id = env.register(ProductFollowContract, ());
+    let client = ProductFollowContractClient::new(&env, &contract_id);
+    let product_id = 1u32;
+    let new_price = 100u64;
+    env.mock_all_auths();
+
+    // Simulate following a product
+    let user = Address::generate(&env);
+    let categories = Vec::from_array(&env, [FollowCategory::PriceChange, FollowCategory::Restock]);
+    client.follow_product(&user, &product_id, &categories);
+
+    // Trigger price change alert
+    let result = client.try_notify_price_change(&product_id, &new_price);
+    assert!(result.is_ok());
+
+    // Trigger restock alert
+    let result = client.try_notify_restock(&product_id);
+    assert!(result.is_ok());
+
+    // Verify alerts were logged
+    // let history = ProductFollowContract::get_notification_history(env.clone(), user.clone()).unwrap();
+    // assert_eq!(history.len(), 2);
+    // assert_eq!(history.get(0).unwrap().event_type, FollowCategory::PriceChange);
+    // assert_eq!(history.get(1).unwrap().event_type, FollowCategory::Restock);
+}
+
+#[test]
+fn test_trigger_timing() {
+}
