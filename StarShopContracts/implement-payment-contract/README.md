@@ -1,13 +1,13 @@
 # Payment Contract
 
-## Overview
+## 📖 Overview
 
 The **Payment Contract** is a smart contract designed to manage administrative control and upgrades for a transaction-based system. It serves as the foundation for handling payments, disputes, and refunds by allowing an administrator to initialize the contract, manage upgrades, and transfer ownership.
 
 The contract integrates with other modules such as `DisputeContract`, `RefundContract`, and `TransactionContract`, which collectively form a robust payment system.
 This contract is modular and consists of four primary components:
 
-## Purpose
+## 🚀 Purpose
 
 The **Payment Contract** is primarily responsible for:
 - Initializing the contract and setting an administrator.
@@ -15,7 +15,7 @@ The **Payment Contract** is primarily responsible for:
 - Providing a mechanism to retrieve the current administrator.
 - Enabling the transfer of administrative rights to a new address.
 
-## Features
+## 🚀 Features
 
 - **Secure Fund Transfers**: Ensures only authorized entities can perform financial operations.
 - **Admin Control**: Enables contract upgrades and allows admin privileges to be transferred securely.
@@ -75,17 +75,15 @@ src/
 ```
 
 
-## Installation and Deployment
+## 🛠 Installation and Deployment
 Ensure you have **Rust** and **Soroban CLI** installed.
 
 ### Prerequisites
-
 - Rust toolchain
 - Soroban CLI
 - Soroban SDK
 
 ### Build the Contract
-
 ```sh
 cargo build --release --target wasm32-unknown-unknown
 ```
@@ -104,6 +102,29 @@ cargo build --release --target wasm32-unknown-unknown
    ```sh
    soroban contract invoke --id <contract_id> --fn initialize --args <admin_address>
    ```
+
+### Compile the Contract
+```bash
+cargo build --target wasm32-unknown-unknown --release
+```
+### Compilation in local
+
+To compile the contract, follow these steps:
+
+```sh
+stellar contract build
+```
+
+### Run the test
+
+```bash
+cargo test  
+```
+Output
+```bash
+running test
+test test::test ... ok 
+```
 
 ## Interaction
 
