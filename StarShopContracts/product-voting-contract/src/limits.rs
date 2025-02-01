@@ -1,5 +1,5 @@
-use soroban_sdk::{symbol_short, Address, Env, Map, Vec};
 use crate::types::Error;
+use soroban_sdk::{symbol_short, Address, Env, Map, Vec};
 
 pub struct VoteLimiter;
 
@@ -9,13 +9,20 @@ const MIN_ACCOUNT_AGE: u64 = 7 * 24 * 60 * 60; // 7 days in seconds
 impl VoteLimiter {
     pub fn init(env: &Env) {
         let usr_votes: Map<Address, Vec<u64>> = Map::new(env);
-        env.storage().instance().set(&symbol_short!("usr_votes"), &usr_votes);
+        env.storage()
+            .instance()
+            .set(&symbol_short!("usr_votes"), &usr_votes);
     }
 
     pub fn check_limits(env: &Env, voter: &Address) -> Result<(), Error> {
-        let mut usr_votes: Map<Address, Vec<u64>> = env.storage().instance().get(&symbol_short!("usr_votes")).unwrap();
+        let mut usr_votes: Map<Address, Vec<u64>> = env
+            .storage()
+            .instance()
+            .get(&symbol_short!("usr_votes"))
+            .unwrap_or_else(|| Map::new(env));
+
         let mut user_recent_votes = usr_votes.get(voter.clone()).unwrap_or(Vec::new(env));
-        
+
         let now = env.ledger().timestamp();
 
         // Check account age
@@ -44,7 +51,9 @@ impl VoteLimiter {
         // Record new vote timestamp
         user_recent_votes.push_back(now);
         usr_votes.set(voter.clone(), user_recent_votes);
-        env.storage().instance().set(&symbol_short!("usr_votes"), &usr_votes);
+        env.storage()
+            .instance()
+            .set(&symbol_short!("usr_votes"), &usr_votes);
 
         Ok(())
     }

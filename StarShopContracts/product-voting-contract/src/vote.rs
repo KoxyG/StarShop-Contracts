@@ -1,17 +1,23 @@
-use soroban_sdk::{symbol_short, Address, Env, Map, Symbol};
 use crate::types::{Error, Product, Vote, VoteType};
+use soroban_sdk::{symbol_short, Address, Env, Map, Symbol};
 
 pub struct VoteManager;
 
 impl VoteManager {
     pub fn init(env: &Env) {
         let products: Map<Symbol, Product> = Map::new(env);
-        env.storage().instance().set(&symbol_short!("products"), &products);
+        env.storage()
+            .instance()
+            .set(&symbol_short!("products"), &products);
     }
 
     pub fn create_product(env: &Env, id: Symbol, name: Symbol) -> Result<(), Error> {
-        let mut products: Map<Symbol, Product> = env.storage().instance().get(&symbol_short!("products")).unwrap();
-        
+        let mut products: Map<Symbol, Product> =
+            match env.storage().instance().get(&symbol_short!("products")) {
+                Some(existing_products) => existing_products,
+                None => Map::new(env), // If no products are found, initialize an empty map
+            };
+
         if products.contains_key(id.clone()) {
             return Err(Error::ProductExists);
         }
@@ -24,7 +30,9 @@ impl VoteManager {
         };
 
         products.set(id, product);
-        env.storage().instance().set(&symbol_short!("products"), &products);
+        env.storage()
+            .instance()
+            .set(&symbol_short!("products"), &products);
         Ok(())
     }
 
@@ -34,11 +42,17 @@ impl VoteManager {
         vote_type: VoteType,
         voter: Address,
     ) -> Result<(), Error> {
-        let mut products: Map<Symbol, Product> = env.storage().instance().get(&symbol_short!("products")).unwrap();
-        
-        let mut product = products.get(product_id.clone())
-            .ok_or(Error::ProductNotFound)?;
-            
+        let mut products: Map<Symbol, Product> =
+            match env.storage().instance().get(&symbol_short!("products")) {
+                Some(existing_products) => existing_products,
+                None => return Err(Error::ProductNotFound), // Handle case if products map is missing
+            };
+
+        let mut product = match products.get(product_id.clone()) {
+            Some(p) => p,
+            None => return Err(Error::ProductNotFound),
+        };
+
         let now = env.ledger().timestamp();
 
         // Check voting period (30 days)
@@ -63,13 +77,19 @@ impl VoteManager {
 
         product.votes.set(voter, vote);
         products.set(product_id, product);
-        env.storage().instance().set(&symbol_short!("products"), &products);
+        env.storage()
+            .instance()
+            .set(&symbol_short!("products"), &products);
 
         Ok(())
     }
 
     pub fn get_product(env: &Env, product_id: Symbol) -> Option<Product> {
-        let products: Map<Symbol, Product> = env.storage().instance().get(&symbol_short!("products")).unwrap();
+        let products: Map<Symbol, Product> =
+            match env.storage().instance().get(&symbol_short!("products")) {
+                Some(p) => p,
+                None => return None, // Handle case where no products are available
+            };
         products.get(product_id)
     }
 }
