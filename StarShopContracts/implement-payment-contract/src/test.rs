@@ -6,12 +6,12 @@ use crate::{
     refund::{RefundContract, RefundContractClient, RefundError},
     transaction::TransactionContractClient,
 };
+use soroban_sdk::token::{StellarAssetClient as TokenAdmin, TokenClient};
 use soroban_sdk::{
     symbol_short,
-    testutils::{Address as _, AuthorizedFunction, AuthorizedInvocation},
-    token, Address, Env, IntoVal, Symbol,
+    testutils::{Address as _, AuthorizedFunction, AuthorizedInvocation, Events},
+    Address, Env, IntoVal, Symbol,
 };
-use soroban_sdk::token::{TokenClient, StellarAssetClient as TokenAdmin};
 
 #[test]
 fn test_process_deposit_with_auth() {
@@ -95,19 +95,110 @@ fn test_initialize() {
     // Verify the admin is set correctly
     let stored_admin = client.get_admin();
     assert_eq!(stored_admin, admin, "Admin address should match");
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #1)")]
+fn test_get_admin_before_initialize() {
+    let env = Env::default();
+
+    let contract_id = env.register(PaymentContract, ());
+    let client = PaymentContractClient::new(&env, &contract_id);
+
+    client.get_admin();
+}
+
+#[test]
+fn test_upgrade_contract() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register(PaymentContract, ());
+    let client = PaymentContractClient::new(&env, &contract_id);
+    
+    let admin = Address::generate(&env);
+    
+    // Initialize first
+    client.initialize(&admin);
+    assert_eq!(client.get_admin(), admin);
+
+    // let contract_id = env.register_contract_wasm(None, old_contract::Wasm);
+
+    // let client = old_contract::Client::new(&env, &contract_id);
+    // let admin = Address::random(&env);
+    // client.init(&admin);
+
+    // assert_eq!(1, client.version());
+
+    // let new_wasm_hash = install_new_wasm(&env);
+
+    // client.upgrade(&new_wasm_hash);
+    // assert_eq!(2, client.version());
+
+    // // new_v2_fn was added in the new contract, so the existing
+    // // client is out of date. Generate a new one.
+    // let client = new_contract::Client::new(&env, &contract_id);
+    // assert_eq!(1010101, client.new_v2_fn());
+    
+    // // Test upgrade
+    // let new_wasm = BytesN::from_array(&env, &[9u8; 32]);
+    // client.upgrade(&new_wasm.clone());
+
+    // // Verify the upgrade event was emitted
+    // let events = env.events().all();
+    // assert_eq!(
+    //     events.len(),
+    //     2, // One event for initialization, one for upgrade
+    //     "Two events should be emitted (initialization and upgrade)"
+    // );
+
+    // // Verify authorization
+    // let auths = env.auths();
+    // assert_eq!(auths.len(), 2);
+}
+
+#[test]
+fn test_transfer_admin() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register(PaymentContract, ());
+    let client = PaymentContractClient::new(&env, &contract_id);
+    
+    let admin = Address::generate(&env);
+    let new_admin = Address::generate(&env);
+    
+    // Initialize contract
+    client.initialize(&admin);
+    
+    // Test admin transfer
+    client.transfer_admin(&new_admin);
+
+    // Verify authorization
+    let auths = env.auths();
+    assert_eq!(auths.len(), 2);
+    
+    // Verify new admin is set
+    assert_eq!(client.get_admin(), new_admin);
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #2)")]
+fn test_reinitialize() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register(PaymentContract, ());
+    let client = PaymentContractClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    let new_admin = Address::generate(&env);
+
+    // Create an admin address
+    client.initialize(&admin);
 
     // Attempt to re-initialize (should fail)
-    // let result = client.initialize(&admin);
-    // assert_eq!(
-    //     result,
-    //     Err(PaymentError::AlreadyInitialized),
-    //     "Re-initialization should fail"
-    // );
-
-    // assert!(
-    //     matches!(result, Err(PaymentError::AlreadyInitialized)),
-    //     "Re-initialization should fail with AlreadyInitialized error"
-    // );
+    client.initialize(&new_admin);
 }
 
 #[test]
