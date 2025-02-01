@@ -2,13 +2,16 @@
 extern crate std;
 
 use super::*;
-use crate::transaction::TransactionContractClient;
+use crate::{
+    refund::{RefundContract, RefundContractClient, RefundError},
+    transaction::TransactionContractClient,
+};
 use soroban_sdk::{
     symbol_short,
     testutils::{Address as _, AuthorizedFunction, AuthorizedInvocation},
     token, Address, Env, IntoVal, Symbol,
 };
-use token::{StellarAssetClient as TokenAdmin, TokenClient};
+use soroban_sdk::token::{TokenClient, StellarAssetClient as TokenAdmin};
 
 #[test]
 fn test_process_deposit_with_auth() {
@@ -38,47 +41,6 @@ fn test_process_deposit_with_auth() {
         &recipient.clone(),
         &100,
     );
-use crate::{
-    refund::{RefundContract, RefundContractClient, RefundError},
-    transaction::TransactionContractClient,
-};
-use soroban_sdk::{
-    symbol_short,
-    testutils::{Address as _, AuthorizedFunction, AuthorizedInvocation, Ledger},
-    token::{self, Client as TokenClient, StellarAssetClient as TokenAdmin},
-    Address, Env, IntoVal, Symbol,
-};
-
-
-
-
-#[test]
-fn test_process_refund_success() {
-    let env = Env::default();
-    env.mock_all_auths();
-
-    let contract_id = env.register_contract(None, RefundContract);
-    let contract = RefundContractClient::new(&env, &contract_id);
-
-    // Create token contract
-    let token_admin = Address::generate(&env);
-    let token_contract_id = env.register_stellar_asset_contract(token_admin.clone());
-
-    // Clone token_contract_id to prevent move error
-    let token_contract_id_clone = token_contract_id.clone();
-
-    let token = TokenAdmin::new(&env, &token_contract_id);
-
-    // Setup test accounts
-    let seller = Address::generate(&env);
-    let buyer = Address::generate(&env);
-
-    // Mint initial tokens to seller
-    token.mint(&seller, &1000);
-
-    // Process refund
-    let refund_amount = 100;
-    contract.process_refund(&token_contract_id_clone, &seller, &buyer, &refund_amount);
 
     // Verify signed transactions
     assert_eq!(
@@ -94,16 +56,6 @@ fn test_process_refund_success() {
                         sender.clone(),
                         recipient.clone(),
                         100_i128
-            seller.clone(),
-            AuthorizedInvocation {
-                function: AuthorizedFunction::Contract((
-                    contract_id.clone(),
-                    Symbol::new(&env, "process_refund"),
-                    (
-                        token_contract_id_clone.clone(),
-                        seller.clone(),
-                        buyer.clone(),
-                        refund_amount,
                     )
                         .into_val(&env),
                 )),
@@ -112,14 +64,11 @@ fn test_process_refund_success() {
                         token_contract_id.address().clone(),
                         symbol_short!("transfer"),
                         (sender.clone(), recipient.clone(), 100_i128).into_val(&env),
-                        token_contract_id_clone.clone(),
-                        symbol_short!("transfer"),
-                        (seller.clone(), buyer.clone(), refund_amount).into_val(&env),
                     )),
                     sub_invocations: std::vec![],
                 }]
             }
-        ),]
+        )]
     );
 
     // Verify balances
@@ -160,6 +109,61 @@ fn test_initialize() {
     //     "Re-initialization should fail with AlreadyInitialized error"
     // );
 }
+
+#[test]
+fn test_process_refund_success() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register_contract(None, RefundContract);
+    let contract = RefundContractClient::new(&env, &contract_id);
+
+    // Create token contract
+    let token_admin = Address::generate(&env);
+    let token_contract_id = env.register_stellar_asset_contract(token_admin.clone());
+
+    // Clone token_contract_id to prevent move error
+    let token_contract_id_clone = token_contract_id.clone();
+
+    let token = TokenAdmin::new(&env, &token_contract_id);
+
+    // Setup test accounts
+    let seller = Address::generate(&env);
+    let buyer = Address::generate(&env);
+
+    // Mint initial tokens to seller
+    token.mint(&seller, &1000);
+
+    // Process refund
+    let refund_amount = 100;
+    contract.process_refund(&token_contract_id_clone, &seller, &buyer, &refund_amount);
+
+    // Verify signed transactions
+    assert_eq!(
+        env.auths(),
+        std::vec![(
+            seller.clone(),
+            AuthorizedInvocation {
+                function: AuthorizedFunction::Contract((
+                    contract_id.clone(),
+                    Symbol::new(&env, "process_refund"),
+                    (
+                        token_contract_id_clone.clone(),
+                        seller.clone(),
+                        buyer.clone(),
+                        refund_amount,
+                    )
+                        .into_val(&env),
+                )),
+                sub_invocations: std::vec![AuthorizedInvocation {
+                    function: AuthorizedFunction::Contract((
+                        token_contract_id_clone.clone(),
+                        symbol_short!("transfer"),
+                        (seller.clone(), buyer.clone(), refund_amount).into_val(&env),
+                    )),
+                    sub_invocations: std::vec![],
+                }]
+            }
         )]
     );
 
