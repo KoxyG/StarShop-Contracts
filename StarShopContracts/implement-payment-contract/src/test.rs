@@ -5,7 +5,7 @@ use super::*;
 use soroban_sdk::{
     testutils::{Address as _, AuthorizedFunction, AuthorizedInvocation, Ledger},
     token::{self, Client as TokenClient, StellarAssetClient as TokenAdmin},
-    IntoVal, Symbol
+    IntoVal, Symbol,
 };
 
 #[test]
