@@ -5,7 +5,7 @@ use super::*;
 use crate::transaction::TransactionContractClient;
 use soroban_sdk::{
     symbol_short,
-    testutils::{Address as _, AuthorizedFunction, AuthorizedInvocation, Ledger},
+    testutils::{Address as _, AuthorizedFunction, AuthorizedInvocation},
     token, Address, Env, IntoVal, Symbol,
 };
 use token::{StellarAssetClient as TokenAdmin, TokenClient};
@@ -16,7 +16,7 @@ fn test_process_deposit_with_auth() {
     env.mock_all_auths();
 
     let contract_id = env.register(TransactionContract, ());
-    let contract = TransactionContractClient::new(&env, &contract_id);
+    let client = TransactionContractClient::new(&env, &contract_id);
 
     let token_admin = Address::generate(&env);
 
@@ -31,14 +31,15 @@ fn test_process_deposit_with_auth() {
     // Mint tokens to sender
     token.mint(&sender, &1000);
 
-    contract.process_deposit(
+    // Execute transaction
+    client.process_deposit(
         &token_contract_id.address().clone(),
         &sender.clone(),
         &recipient.clone(),
         &100,
     );
 
-    // Verify authorizations
+    // Verify signed transactions
     assert_eq!(
         env.auths(),
         std::vec![(
@@ -73,8 +74,35 @@ fn test_process_deposit_with_auth() {
     assert_eq!(token_client.balance(&recipient), 100);
 }
 
-// To be implemented
-// test_process_refund_with_auth()
-// test_resolve_dispute_with_auth()
-// test_error_conditions()
-// test_cross_account_payment_execution()
+#[test]
+fn test_initialize() {
+    // Create a mock environment
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register(PaymentContract, ());
+    let client = PaymentContractClient::new(&env, &contract_id);
+
+    // Create an admin address
+    let admin = Address::generate(&env);
+
+    // Initialize the contract
+    client.initialize(&admin);
+
+    // Verify the admin is set correctly
+    let stored_admin = client.get_admin();
+    assert_eq!(stored_admin, admin, "Admin address should match");
+
+    // Attempt to re-initialize (should fail)
+    // let result = client.initialize(&admin);
+    // assert_eq!(
+    //     result,
+    //     Err(PaymentError::AlreadyInitialized),
+    //     "Re-initialization should fail"
+    // );
+
+    // assert!(
+    //     matches!(result, Err(PaymentError::AlreadyInitialized)),
+    //     "Re-initialization should fail with AlreadyInitialized error"
+    // );
+}
