@@ -129,16 +129,19 @@ fn test_process_refund_invalid_amount() {
 #[test]
 #[should_panic(expected = "Unauthorized function call for address")]
 fn test_panic_resolve_dispute_not_authenticated() {
+    // Initialize the environment and contract
     let env = Env::default();
     let contract_id = env.register(DisputeContract, ());
     let client = DisputeContractClient::new(&env, &contract_id);
 
+    // Generate test addresses for different roles
     let admin = Address::generate(&env);
     let buyer = Address::generate(&env);
     let seller = Address::generate(&env);
     let arbitrator = Address::generate(&env);
     let refund_amount = 1000i128;
 
+    // Set up the token contract and mint tokens to arbitrator
     let token_contract = env.register_stellar_asset_contract_v2(admin.clone());
     let token_address = token_contract.address();
 
@@ -146,7 +149,7 @@ fn test_panic_resolve_dispute_not_authenticated() {
     let token_asset_client = TokenAdmin::new(&env, &token_address);
     token_asset_client.mint(&arbitrator, &refund_amount);
 
-    // Simulate resolving a dispute in favor of the buyer
+    // This should fail because we haven't mocked the authentication
     client.resolve_dispute(
         &token_address,
         &arbitrator,
@@ -160,22 +163,26 @@ fn test_panic_resolve_dispute_not_authenticated() {
 #[test]
 #[should_panic(expected = "Error(Contract, #1)")]
 fn test_resolve_dispute_insufficient_funds() {
+    // Initialize environment with mocked authentication
     let env = Env::default();
     let contract_id = env.register(DisputeContract, ());
     let client = DisputeContractClient::new(&env, &contract_id);
     env.mock_all_auths();
 
+    // Set up test addresses and amounts
     let admin = Address::generate(&env);
     let buyer = Address::generate(&env);
     let seller = Address::generate(&env);
     let arbitrator = Address::generate(&env);
-    let refund_amount = 1000i128;
+    let refund_amount = 1000i128; // Trying to refund 1000 tokens
 
+    // Set up token contract
     let token_contract = env.register_stellar_asset_contract_v2(admin.clone());
     let token_address = token_contract.address();
-
     let _token_client = TokenClient::new(&env, &token_address);
     let token_asset_client = TokenAdmin::new(&env, &token_address);
+
+    // Mint only 100 tokens - less than the refund amount
     token_asset_client.mint(&arbitrator, &100i128);
 
     // Simulate resolving a dispute in favor of the buyer
@@ -192,17 +199,20 @@ fn test_resolve_dispute_insufficient_funds() {
 #[test]
 #[should_panic(expected = "Error(Contract, #3)")]
 fn test_resolve_dispute_invalid_amount() {
+    // Initialize environment with mocked authentication
     let env = Env::default();
     let contract_id = env.register(DisputeContract, ());
     let client = DisputeContractClient::new(&env, &contract_id);
     env.mock_all_auths();
 
+    // Set up test addresses
     let admin = Address::generate(&env);
     let buyer = Address::generate(&env);
     let seller = Address::generate(&env);
     let arbitrator = Address::generate(&env);
-    let invalid_refund_amount = 0i128;
+    let invalid_refund_amount = 0i128; // Invalid amount (zero)
 
+    // Set up token contract
     let token_contract = env.register_stellar_asset_contract_v2(admin.clone());
     let token_address = token_contract.address();
 
@@ -210,7 +220,7 @@ fn test_resolve_dispute_invalid_amount() {
     let token_asset_client = TokenAdmin::new(&env, &token_address);
     token_asset_client.mint(&arbitrator, &invalid_refund_amount);
 
-    // Simulate resolving a dispute in favor of the buyer
+    // This should fail due to invalid amount (zero)
     client.resolve_dispute(
         &token_address,
         &arbitrator,
@@ -223,11 +233,13 @@ fn test_resolve_dispute_invalid_amount() {
 
 #[test]
 fn test_resolve_dispute_refund_buyer() {
+    // Initialize environment with mocked authentication
     let env = Env::default();
     let contract_id = env.register(DisputeContract, ());
     let client = DisputeContractClient::new(&env, &contract_id);
     env.mock_all_auths();
 
+    // Set up test addresses and amount
     let admin = Address::generate(&env);
     let buyer = <Address>::generate(&env);
     let seller = <Address>::generate(&env);
@@ -242,6 +254,7 @@ fn test_resolve_dispute_refund_buyer() {
     let token_asset_client = TokenAdmin::new(&env, &token_address);
     token_asset_client.mint(&arbitrator, &refund_amount);
 
+    // Verify initial balances
     let arbitrator_balance_before = token_client.balance(&arbitrator);
     assert_eq!(arbitrator_balance_before, refund_amount);
 
@@ -269,18 +282,20 @@ fn test_resolve_dispute_refund_buyer() {
     let buyer_balance_after = token_client.balance(&buyer);
     assert_eq!(buyer_balance_after, refund_amount);
 
-    // Vheck the seller's balance
+    // Check the seller's balance
     let seller_balance_after = token_client.balance(&seller);
     assert_eq!(seller_balance_after, 0);
 }
 
 #[test]
 fn test_resolve_dispute_pay_seller() {
+    // Initialize environment with mocked authentication
     let env = Env::default();
     let contract_id = env.register(DisputeContract, ());
     let client = DisputeContractClient::new(&env, &contract_id);
     env.mock_all_auths();
 
+    // Set up test addresses and amount
     let admin = Address::generate(&env);
     let buyer = <Address>::generate(&env);
     let seller = <Address>::generate(&env);
@@ -295,6 +310,7 @@ fn test_resolve_dispute_pay_seller() {
     let token_asset_client = TokenAdmin::new(&env, &token_address);
     token_asset_client.mint(&arbitrator, &refund_amount);
 
+    // Verify initial balances
     let arbitrator_balance_before = token_client.balance(&arbitrator);
     assert_eq!(arbitrator_balance_before, refund_amount);
 
@@ -322,7 +338,7 @@ fn test_resolve_dispute_pay_seller() {
     let buyer_balance_after = token_client.balance(&buyer);
     assert_eq!(buyer_balance_after, 0);
 
-    // Vheck the seller's balance
+    // Check the seller's balance
     let seller_balance_after = token_client.balance(&seller);
     assert_eq!(seller_balance_after, refund_amount);
 }
