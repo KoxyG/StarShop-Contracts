@@ -1,5 +1,5 @@
 #![no_std]
-use soroban_sdk::{contract, contracterror, contractimpl, symbol_short, Address, BytesN, Env, IntoVal, Symbol};
+use soroban_sdk::{contract, contracterror, contractimpl, symbol_short, Address, BytesN, Env};
 
 mod dispute;
 mod refund;
