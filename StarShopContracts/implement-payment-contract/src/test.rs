@@ -13,9 +13,6 @@ use soroban_sdk::{
     Address, Env, IntoVal, Symbol,
 };
 
-
-
-
 #[test]
 fn test_process_refund_success() {
     let env = Env::default();
