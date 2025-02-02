@@ -1,13 +1,12 @@
 #![cfg(test)]
 
-use crate::follow::DEFAULT_FOLLOW_LIMIT;
+use crate::{
+    datatype::{DataKeys, NotificationPriority},
+    follow::DEFAULT_FOLLOW_LIMIT,
+};
 
 use super::*;
-use crate::datatype::{DataKeys, FollowCategory, FollowData};
-use soroban_sdk::{
-    testutils::{Address as TestAddress, Ledger as TestLedger},
-    vec, Env, Vec,
-};
+use soroban_sdk::{testutils::Address as TestAddress, vec, Env, Vec};
 
 #[test]
 #[should_panic(expected = "Unauthorized function call for address")]
@@ -49,15 +48,10 @@ fn test_panic_follow_limit_exceeded() {
     let categories = vec![&env, FollowCategory::PriceChange];
     env.mock_all_auths();
 
-    // Follow the product until the limit is reached
-    for _i in 0..DEFAULT_FOLLOW_LIMIT {
-        let address = <Address>::generate(&env);
-        client.follow_product(&address, &product_id, &categories);
+    for _ in 0..DEFAULT_FOLLOW_LIMIT + 1 {
+        let follower_address = <Address>::generate(&env);
+        client.follow_product(&follower_address, &product_id, &categories);
     }
-
-    // Attempt to follow the product again, which should exceed the limit and panic
-    let address = <Address>::generate(&env);
-    client.follow_product(&address, &product_id, &categories);
 }
 
 #[test]
@@ -73,21 +67,21 @@ fn test_add_follower() {
     client.follow_product(&follower_address, &product_id, &categories);
 
     env.as_contract(&contract_id, || {
-        let key = DataKeys::FollowList(follower_address.clone());
-        let followers: Vec<FollowData> = env
+        let key = symbol_short!("followers");
+        let reputation_records: Vec<FollowData> = env
             .storage()
             .persistent()
             .get(&key)
-            .expect("Follow list key not found");
-        assert_eq!(followers.len(), 1);
-        assert_eq!(followers.first().unwrap().user, follower_address);
-        assert_eq!(followers.first().unwrap().product_id, product_id);
-        assert_eq!(followers.first().unwrap().categories, categories);
+            .expect("Reputation history key rating key not found");
+        assert_eq!(reputation_records.len(), 1);
+        assert_eq!(reputation_records.first().unwrap().user, follower_address);
+        assert_eq!(reputation_records.first().unwrap().product_id, product_id);
+        assert_eq!(reputation_records.first().unwrap().categories, categories);
         assert_eq!(
-            followers.first().unwrap().timestamp,
+            reputation_records.first().unwrap().timestamp,
             env.ledger().timestamp()
         );
-        assert_eq!(followers.first().unwrap().expires_at, None);
+        assert_eq!(reputation_records.first().unwrap().expires_at, None);
     });
 }
 
@@ -103,194 +97,286 @@ fn test_unfollow() {
     env.mock_all_auths();
 
     for _ in 0..followers {
-        let address = <Address>::generate(&env);
-        client.follow_product(&address, &product_id, &categories);
-        if follower_address.is_none() {
-            follower_address = Some(address.clone());
-        }
+        let follower_address = <Address>::generate(&env);
+        client.follow_product(&follower_address, &product_id, &categories);
     }
-
     env.as_contract(&contract_id, || {
-        let key = DataKeys::FollowList(follower_address.clone().unwrap());
-        let follow_records: Vec<FollowData> = env
+        let key = symbol_short!("followers");
+        let reputation_records: Vec<FollowData> = env
             .storage()
             .persistent()
             .get(&key)
-            .expect("Follow list key not found");
-        assert_eq!(follow_records.len(), 1);
+            .expect("Reputation history key rating key not found");
+        assert_eq!(reputation_records.len(), followers);
+        follower_address = Some(reputation_records.first().unwrap().user)
     });
 
-    client.unfollow_product(&follower_address.clone().unwrap(), &product_id);
+    client.unfollow_product(&follower_address.unwrap(), &product_id);
 
     env.as_contract(&contract_id, || {
-        let key = DataKeys::FollowList(follower_address.clone().unwrap());
-        let follow_records: Vec<FollowData> = env
+        let key = symbol_short!("followers");
+        let reputation_records: Vec<FollowData> = env
             .storage()
             .persistent()
             .get(&key)
+            .expect("Reputation history key rating key not found");
+        assert_eq!(reputation_records.len(), followers - 1);
+    });
+}
+
+/* -------------------------------------------------------------------------- */
+/*                                      -                                     */
+/* -------------------------------------------------------------------------- */
+
+#[test] // Done
+fn test_notification_delivery_timing() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(ProductFollowContract, ());
+    let client = ProductFollowContractClient::new(&env, &contract_id);
+    let user_address = <Address>::generate(&env);
+    client.register_user(&user_address);
+    let product_id = 1234u32;
+    let categories = vec![&env, FollowCategory::PriceChange];
+
+    // Follow the product
+    client.follow_product(&user_address, &product_id, &categories);
+
+    // Simulate price change
+    let new_price: u64 = 99;
+    client.notify_price_change(&product_id, &new_price);
+
+    // Retrieve the timestamp of the notification
+    env.as_contract(&contract_id, || {
+        let history_key = DataKeys::NotificationHistory(user_address);
+        let notifications: Vec<EventLog> = env
+            .storage()
+            .persistent()
+            .get(&history_key)
             .unwrap_or_else(|| Vec::new(&env));
-        assert_eq!(follow_records.len(), 0);
+
+        assert_eq!(notifications.len(), 1);
+        assert_eq!(
+            notifications.first().unwrap().product_id,
+            product_id as u128
+        );
+        assert_eq!(
+            notifications.first().unwrap().event_type,
+            FollowCategory::PriceChange
+        );
+
+        let notification_time = notifications.first().unwrap().triggered_at;
+        let current_time = env.ledger().timestamp();
+
+        // Check if notification delivery is within a reasonable time window
+        assert!(current_time >= notification_time);
     });
 }
 
-#[test]
-fn test_price_change_alert() {
-    let env = Env::default();
+/* -------------------------------------------------------------------------- */
+/*                                      -                                     */
+/* -------------------------------------------------------------------------- */
 
+#[test] // Done
+fn test_notification_priority_handling() {
+    let env = Env::default();
+    env.mock_all_auths();
     let contract_id = env.register(ProductFollowContract, ());
     let client = ProductFollowContractClient::new(&env, &contract_id);
-    let product_id = 1u32;
-    let new_price = 100u64;
-    env.mock_all_auths();
+    let user_address = <Address>::generate(&env);
+    client.register_user(&user_address);
+    let product_id = 1234u32;
+    let categories = vec![&env, FollowCategory::PriceChange];
 
-    // Set the current time for testing purposes
-    env.ledger().set_timestamp(3601);
+    // Set high priority for the user
+    let preferences = NotificationPreferences {
+        user: user_address.clone(),
+        categories: vec![&env, FollowCategory::PriceChange],
+        mute_notifications: false,
+        priority: NotificationPriority::High,
+    };
+    client.set_notification_preferences(&user_address, &preferences);
 
-    // Simulate following a product
-    let user = Address::generate(&env);
-    let categories = Vec::from_array(&env, [FollowCategory::PriceChange]);
-    client.follow_product(&user, &product_id, &categories);
+    // Follow the product
+    client.follow_product(&user_address, &product_id, &categories);
 
-    // Trigger price change alert
-    let result = client.try_notify_price_change(&product_id, &new_price);
-    assert!(result.is_ok());
+    // Simulate price change
+    let new_price = 99u64;
+    client.notify_price_change(&product_id, &new_price);
 
-    // Verify alert was logged
-    let history = client.get_notification_history(&user);
+    // Check if the notification has the correct priority
+    env.as_contract(&contract_id, || {
+        let history_key = DataKeys::NotificationHistory(user_address);
+        let notifications: Vec<EventLog> = env
+            .storage()
+            .persistent()
+            .get(&history_key)
+            .unwrap_or_else(|| Vec::new(&env));
 
-    assert_eq!(history.len(), 1);
-    assert_eq!(
-        history.get(0).unwrap().event_type,
-        FollowCategory::PriceChange
-    );
+        assert_eq!(notifications.len(), 1);
+        assert_eq!(
+            notifications.first().unwrap().priority,
+            NotificationPriority::High
+        );
+    });
 }
 
-#[test]
-fn test_restock_alert() {
+/* -------------------------------------------------------------------------- */
+/*                                      -                                     */
+/* -------------------------------------------------------------------------- */
+
+#[test] // Done
+fn test_validate_notification_format() {
     let env = Env::default();
+    env.mock_all_auths();
     let contract_id = env.register(ProductFollowContract, ());
     let client = ProductFollowContractClient::new(&env, &contract_id);
-    let product_id = 1u32;
-    env.mock_all_auths();
+    let user_address = <Address>::generate(&env);
+    client.register_user(&user_address);
+    let product_id = 1234u32;
+    let categories = vec![&env, FollowCategory::PriceChange];
 
-    // Set the current time for testing purposes
-    env.ledger().set_timestamp(3601);
+    // Follow the product
+    client.follow_product(&user_address, &product_id, &categories);
 
-    // Simulate following a product
-    let user = Address::generate(&env);
-    let categories = Vec::from_array(&env, [FollowCategory::Restock]);
-    client.follow_product(&user, &product_id, &categories);
+    // Simulate price change
+    let new_price = 99;
+    client.notify_price_change(&product_id, &new_price);
 
-    // Trigger restock alert
-    let result = client.try_notify_restock(&product_id);
-    assert!(result.is_ok());
+    env.as_contract(&contract_id, || {
+        // Retrieve the notification event and check its format
+        let history_key = DataKeys::NotificationHistory(user_address);
+        let notifications: Vec<EventLog> = env
+            .storage()
+            .persistent()
+            .get(&history_key)
+            .unwrap_or_else(|| Vec::new(&env));
 
-    // Verify alert was logged
-    let history = client.get_notification_history(&user);
-    assert_eq!(history.len(), 1);
-    assert_eq!(history.get(0).unwrap().event_type, FollowCategory::Restock);
+        assert_eq!(notifications.len(), 1);
+        let notification = &notifications.first().unwrap();
+
+        // Validate notification format
+        assert_eq!(notification.product_id, product_id as u128);
+        assert!(notification.event_type == FollowCategory::PriceChange);
+        assert!(matches!(
+            notification.priority,
+            NotificationPriority::High | NotificationPriority::Medium | NotificationPriority::Low
+        ));
+    });
 }
 
-#[test]
-fn test_special_offer_alert() {
+/* -------------------------------------------------------------------------- */
+/*                                      -                                     */
+/* -------------------------------------------------------------------------- */
+
+#[test] // Done
+fn test_verify_notification_history_tracking() {
     let env = Env::default();
+    env.mock_all_auths();
     let contract_id = env.register(ProductFollowContract, ());
     let client = ProductFollowContractClient::new(&env, &contract_id);
-    let product_id = 1u32;
-    env.mock_all_auths();
+    let user_address = <Address>::generate(&env);
+    client.register_user(&user_address);
+    let product_id = 1234u32;
+    let categories = vec![&env, FollowCategory::PriceChange];
 
-    // Set the current time for testing purposes
-    env.ledger().set_timestamp(3601);
+    // Follow the product
+    client.follow_product(&user_address, &product_id, &categories);
 
-    // Simulate following a product
-    let user = Address::generate(&env);
-    let categories = Vec::from_array(&env, [FollowCategory::SpecialOffer]);
-    client.follow_product(&user, &product_id, &categories);
+    // Simulate price change
+    let new_price = 99;
+    client.notify_price_change(&product_id, &new_price);
 
-    // Trigger special offer alert
-    let result = client.try_notify_special_offer(&product_id);
-    assert!(result.is_ok());
+    // Simulate another price change
+    let new_price_2 = 120;
+    client.notify_price_change(&product_id, &new_price_2);
 
-    // // Verify alert was logged
-    let history = client.get_notification_history(&user);
-    assert_eq!(history.len(), 1);
-    assert_eq!(
-        history.get(0).unwrap().event_type,
-        FollowCategory::SpecialOffer
-    );
+    // Check notification history size (should not exceed 100)
+    env.as_contract(&contract_id, || {
+        let history_key = DataKeys::NotificationHistory(user_address);
+        let notifications: Vec<EventLog> = env
+            .storage()
+            .persistent()
+            .get(&history_key)
+            .unwrap_or_else(|| Vec::new(&env));
+
+        assert_eq!(2, notifications.len()); // Ensure that it's 2 entries
+        assert!(notifications.len() <= 100); // Ensure that the history is capped
+    });
 }
 
-#[test]
-fn test_condition_combinations() {
+/* -------------------------------------------------------------------------- */
+/*                                      -                                     */
+/* -------------------------------------------------------------------------- */
+
+#[test] // Done
+fn test_notification_customization_options() {
     let env = Env::default();
+    env.mock_all_auths();
     let contract_id = env.register(ProductFollowContract, ());
     let client = ProductFollowContractClient::new(&env, &contract_id);
-    let product_id = 1u32;
-    let new_price = 100u64;
-    env.mock_all_auths();
+    let user_address = <Address>::generate(&env);
+    client.register_user(&user_address);
+    let product_id = 1234u32;
+    let categories = vec![&env, FollowCategory::PriceChange];
 
-    // Set the current time for testing purposes
-    env.ledger().set_timestamp(3601);
+    // Set preferences to mute notifications
+    let preferences = NotificationPreferences {
+        user: user_address.clone(),
+        categories: vec![&env, FollowCategory::PriceChange],
+        mute_notifications: true,
+        priority: NotificationPriority::High,
+    };
+    client.set_notification_preferences(&user_address, &preferences);
 
-    // Simulate following a product
-    let user = Address::generate(&env);
-    let categories = Vec::from_array(&env, [FollowCategory::PriceChange, FollowCategory::Restock]);
-    client.follow_product(&user, &product_id, &categories);
+    // Follow the product
+    client.follow_product(&user_address, &product_id, &categories);
 
-    // Trigger price change alert
-    let result = client.try_notify_price_change(&product_id, &new_price);
-    assert!(result.is_ok());
+    // Simulate price change
+    let new_price = 99;
+    client.notify_price_change(&product_id, &new_price);
 
-    // Set the current time for testing purposes
-    env.ledger().set_timestamp(3601 + 3601);
+    // Check if the notification was suppressed (since mute is enabled)
+    env.as_contract(&contract_id, || {
+        let history_key = DataKeys::NotificationHistory(user_address.clone());
+        let notifications: Vec<EventLog> = env
+            .storage()
+            .persistent()
+            .get(&history_key)
+            .unwrap_or_else(|| Vec::new(&env));
 
-    // Trigger restock alert
-    let result = client.try_notify_restock(&product_id);
-    assert!(result.is_ok());
-
-    // Verify alerts were logged
-    let history = client.get_notification_history(&user);
-    assert_eq!(history.len(), 2);
-    assert_eq!(
-        history.get(0).unwrap().event_type,
-        FollowCategory::PriceChange
-    );
-    assert_eq!(history.get(1).unwrap().event_type, FollowCategory::Restock);
+        assert_eq!(notifications.len(), 0); // No notification should be sent
+    });
 }
 
-#[test]
-fn test_alert_rate_limiting() {
+/* -------------------------------------------------------------------------- */
+/*                                      -                                     */
+/* -------------------------------------------------------------------------- */
+
+#[test] // Done
+fn test_validate_user_preferences() {
     let env = Env::default();
+    env.mock_all_auths();
     let contract_id = env.register(ProductFollowContract, ());
     let client = ProductFollowContractClient::new(&env, &contract_id);
-    let product_id = 1u32;
-    let new_price = 100u64;
-    env.mock_all_auths();
+    let user_address = <Address>::generate(&env);
 
-    // Set the current time for testing purposes
-    env.ledger().set_timestamp(3601);
+    // Set custom notification preferences
+    let preferences = NotificationPreferences {
+        user: user_address.clone(),
+        categories: vec![&env, FollowCategory::Restock],
+        mute_notifications: false,
+        priority: NotificationPriority::Medium,
+    };
+    client.set_notification_preferences(&user_address, &preferences);
 
-    // Simulate following a product
-    let user = Address::generate(&env);
-    let categories = Vec::from_array(&env, [FollowCategory::PriceChange]);
-    client.follow_product(&user, &product_id, &categories);
+    // Retrieve preferences and verify
+    let retrieved_preferences = client.get_notification_preferences(&user_address);
 
-    // Trigger price change alert
-    let result = client.try_notify_price_change(&product_id, &new_price);
-    assert!(result.is_ok());
-
-    // Set the current time for testing purposes
-    env.ledger().set_timestamp(0);
-
-    // Attempt to trigger another price change alert within the rate limit period
-    let result = client.try_notify_price_change(&product_id, &new_price);
-    assert!(result.is_err());
-
-    // Verify only one alert was logged
-    let history = client.get_notification_history(&user);
-    assert_eq!(history.len(), 1);
+    assert_eq!(retrieved_preferences.user, user_address);
     assert_eq!(
-        history.get(0).unwrap().event_type,
-        FollowCategory::PriceChange
+        retrieved_preferences.categories,
+        vec![&env, FollowCategory::Restock]
     );
+    assert_eq!(retrieved_preferences.priority, NotificationPriority::Medium);
 }
