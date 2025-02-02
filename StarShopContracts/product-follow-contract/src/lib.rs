@@ -206,9 +206,9 @@ impl ProductFollowContract {
             .map_err(|_| Error::NotificationFailed)
     }
 
-    pub fn get_followers(env: Env, product_id: u32) -> Vec<Address> {
+    pub fn get_followers(env: Env, user: Address) -> Vec<Address> {
         let follow_manager = FollowManager::new(&env);
-        let follows = follow_manager.get_followers(product_id);
+        let follows = follow_manager.get_followers(&user);
         let mut addresses = Vec::new(&env);
         for follow in follows.iter() {
             addresses.push_back(follow.user.clone());
