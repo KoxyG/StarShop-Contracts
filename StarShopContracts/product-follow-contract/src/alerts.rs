@@ -120,15 +120,15 @@ impl AlertSystem {
                 .persistent()
                 .get::<DataKeys, Vec<FollowData>>(&follow_list_key)
             {
-                if follows
-                    .iter()
-                    .any(|f| u128::from(f.product_id) == product_id)
-                {
-                    following_users.push_back(user.clone());
+                for follow in follows.iter() {
+                    if u128::from(follow.product_id) == product_id {
+                        following_users.push_back(user.clone());
+                        break;
+                    } else {
+                    }
                 }
             }
         }
-
         Ok(following_users)
     }
 
@@ -155,7 +155,7 @@ impl AlertSystem {
             &env.ledger().timestamp(),
         );
 
-        let history_key = DataKeys::NotificationHistory(user);
+        let history_key = DataKeys::NotificationHistory(user.clone());
         let mut history: Vec<EventLog> = env
             .storage()
             .persistent()
