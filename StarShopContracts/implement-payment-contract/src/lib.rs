@@ -3,13 +3,13 @@ use soroban_sdk::{contract, contracterror, contractimpl, symbol_short, Address, 
 
 mod dispute;
 mod refund;
+mod transaction;
 #[cfg(test)]
 mod test;
-mod transaction;
 
-pub use dispute::{DisputeContract, DisputeDecision, DisputeError};
-pub use refund::{RefundContract, RefundError};
-pub use transaction::{TransactionContract, TransactionError};
+pub use dispute::{DisputeContract, DisputeContractClient, DisputeDecision, DisputeError};
+pub use refund::{RefundContract, RefundContractClient, RefundError};
+pub use transaction::{TransactionContract, TransactionContractClient, TransactionError};
 
 #[contracterror]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
