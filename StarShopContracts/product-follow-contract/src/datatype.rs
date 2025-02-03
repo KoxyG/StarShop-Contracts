@@ -30,6 +30,7 @@ pub enum DataKeys {
     ExpirationTracker(Address),   // Tracks follow expiration times
     LastNotification(Address),    // Last notification timestamp
     AllUsers,
+    ProductFollowers(u32), // List of followers for a product
 }
 
 /// Error types for the follow system
