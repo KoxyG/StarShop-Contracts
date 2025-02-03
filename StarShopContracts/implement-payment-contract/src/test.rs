@@ -6,12 +6,228 @@ use crate::{
     refund::{RefundContract, RefundContractClient, RefundError},
     transaction::TransactionContractClient,
 };
+use soroban_sdk::token::{StellarAssetClient as TokenAdmin, TokenClient};
 use soroban_sdk::{
     symbol_short,
-    testutils::{Address as _, AuthorizedFunction, AuthorizedInvocation, Ledger},
-    token::{self, Client as TokenClient, StellarAssetClient as TokenAdmin},
-    Address, Env, IntoVal, Symbol,
+    testutils::{Address as _, AuthorizedFunction, AuthorizedInvocation, Events},
+    Address, Env, IntoVal, Symbol, vec, String,
 };
+
+mod new_contract {
+    soroban_sdk::contractimport!(
+        file = "../../target/wasm32-unknown-unknown/release/example_contract.wasm"
+    );
+}
+
+fn install_new_wasm(e: &Env) -> BytesN<32> {
+    e.deployer().upload_contract_wasm(new_contract::WASM)
+}
+
+#[test]
+fn test_process_deposit_with_auth() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register(TransactionContract, ());
+    let client = TransactionContractClient::new(&env, &contract_id);
+
+    let token_admin = Address::generate(&env);
+
+    // Create token contract
+    let token_contract_id = env.register_stellar_asset_contract_v2(token_admin.clone());
+    let token = TokenAdmin::new(&env, &token_contract_id.address());
+
+    // Setup test accounts
+    let sender = Address::generate(&env);
+    let recipient = Address::generate(&env);
+
+    // Mint tokens to sender
+    token.mint(&sender, &1000);
+
+    // Execute transaction
+    client.process_deposit(
+        &token_contract_id.address().clone(),
+        &sender.clone(),
+        &recipient.clone(),
+        &100,
+    );
+
+    // Verify signed transactions
+    assert_eq!(
+        env.auths(),
+        std::vec![(
+            sender.clone(),
+            AuthorizedInvocation {
+                function: AuthorizedFunction::Contract((
+                    contract_id.clone(),
+                    Symbol::new(&env, "process_deposit"),
+                    (
+                        token_contract_id.address().clone(),
+                        sender.clone(),
+                        recipient.clone(),
+                        100_i128
+                    )
+                        .into_val(&env),
+                )),
+                sub_invocations: std::vec![AuthorizedInvocation {
+                    function: AuthorizedFunction::Contract((
+                        token_contract_id.address().clone(),
+                        symbol_short!("transfer"),
+                        (sender.clone(), recipient.clone(), 100_i128).into_val(&env),
+                    )),
+                    sub_invocations: std::vec![],
+                }]
+            }
+        )]
+    );
+
+    // Verify balances
+    let token_client = TokenClient::new(&env, &token_contract_id.address());
+    assert_eq!(token_client.balance(&sender), 900);
+    assert_eq!(token_client.balance(&recipient), 100);
+}
+
+#[test]
+fn test_initialize() {
+    // Create a mock environment
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register(PaymentContract, ());
+    let client = PaymentContractClient::new(&env, &contract_id);
+
+    // Create an admin address
+    let admin = Address::generate(&env);
+
+    // Initialize the contract
+    client.initialize(&admin);
+
+    // Verify the admin is set correctly
+    let stored_admin = client.get_admin();
+    assert_eq!(stored_admin, admin, "Admin address should match");
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #1)")]
+fn test_get_admin_before_initialize() {
+    let env = Env::default();
+
+    let contract_id = env.register(PaymentContract, ());
+    let client = PaymentContractClient::new(&env, &contract_id);
+
+    client.get_admin();
+}
+
+#[test]
+fn test_successful_upgrade() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register(PaymentContract, ());
+    let client = PaymentContractClient::new(&env, &contract_id);
+    
+    let admin = Address::generate(&env);
+
+    let new_wasm_hash = install_new_wasm(&env);
+    
+    // Initialize first
+    client.initialize(&admin);
+    assert_eq!(client.get_admin(), admin);
+
+    client.upgrade(&new_wasm_hash);
+
+    // Client is now out of date. Generate a new one.
+    let client = new_contract::Client::new(&env, &contract_id);
+
+    // Test new functions are available in the contract
+    let words = client.hello(&String::from_str(&env, "StarShop ODBoost"));
+    assert_eq!(
+        words,
+        vec![
+            &env,
+            String::from_str(&env, "Hello"),
+            String::from_str(&env, "StarShop ODBoost"),
+        ]
+    );
+}
+
+#[test]
+#[should_panic(expected = "Error(Storage, MissingValue)")]
+fn test_upgrade_with_empty_hash() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register(PaymentContract, ());
+    let client = PaymentContractClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+
+    // Initialize first
+    client.initialize(&admin);
+    assert_eq!(client.get_admin(), admin);
+
+    // Attempt to upgrade with an empty hash
+    assert_eq!(client.upgrade(&BytesN::from_array(&env, &[0; 32])), ());
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #1)")]
+fn test_upgrade_not_initialized() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register(PaymentContract, ());
+    let client = PaymentContractClient::new(&env, &contract_id);
+
+    let new_wasm_hash = install_new_wasm(&env);
+
+    // Attempt to upgrade without initializing
+    assert_eq!(client.upgrade(&new_wasm_hash), ());
+}
+
+#[test]
+fn test_succesful_transfer_admin() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register(PaymentContract, ());
+    let client = PaymentContractClient::new(&env, &contract_id);
+    
+    let admin = Address::generate(&env);
+    let new_admin = Address::generate(&env);
+    
+    // Initialize contract
+    client.initialize(&admin);
+    
+    // Test admin transfer
+    client.transfer_admin(&new_admin);
+
+    // Verify authorization
+    let auths = env.auths();
+    assert_eq!(auths.len(), 2);
+    
+    // Verify new admin is set
+    assert_eq!(client.get_admin(), new_admin);
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #2)")]
+fn test_reinitialize() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register(PaymentContract, ());
+    let client = PaymentContractClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    let new_admin = Address::generate(&env);
+
+    // Create an admin address
+    client.initialize(&admin);
+
+    // Attempt to re-initialize (should fail)
+    client.initialize(&new_admin);
+}
 
 #[test]
 fn test_process_refund_success() {
@@ -41,7 +257,7 @@ fn test_process_refund_success() {
     let refund_amount = 100;
     contract.process_refund(&token_contract_id_clone, &seller, &buyer, &refund_amount);
 
-    // Verify authorizations
+    // Verify signed transactions
     assert_eq!(
         env.auths(),
         std::vec![(
