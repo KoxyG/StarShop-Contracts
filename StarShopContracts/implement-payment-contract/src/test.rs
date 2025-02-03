@@ -10,8 +10,18 @@ use soroban_sdk::token::{StellarAssetClient as TokenAdmin, TokenClient};
 use soroban_sdk::{
     symbol_short,
     testutils::{Address as _, AuthorizedFunction, AuthorizedInvocation, Events},
-    Address, Env, IntoVal, Symbol,
+    Address, Env, IntoVal, Symbol, vec, String,
 };
+
+mod new_contract {
+    soroban_sdk::contractimport!(
+        file = "../../target/wasm32-unknown-unknown/release/example_contract.wasm"
+    );
+}
+
+fn install_new_wasm(e: &Env) -> BytesN<32> {
+    e.deployer().upload_contract_wasm(new_contract::WASM)
+}
 
 #[test]
 fn test_process_deposit_with_auth() {
@@ -109,7 +119,7 @@ fn test_get_admin_before_initialize() {
 }
 
 #[test]
-fn test_upgrade_contract() {
+fn test_successful_upgrade() {
     let env = Env::default();
     env.mock_all_auths();
 
@@ -117,48 +127,66 @@ fn test_upgrade_contract() {
     let client = PaymentContractClient::new(&env, &contract_id);
     
     let admin = Address::generate(&env);
+
+    let new_wasm_hash = install_new_wasm(&env);
     
     // Initialize first
     client.initialize(&admin);
     assert_eq!(client.get_admin(), admin);
 
-    // let contract_id = env.register_contract_wasm(None, old_contract::Wasm);
+    client.upgrade(&new_wasm_hash);
 
-    // let client = old_contract::Client::new(&env, &contract_id);
-    // let admin = Address::random(&env);
-    // client.init(&admin);
+    // Client is now out of date. Generate a new one.
+    let client = new_contract::Client::new(&env, &contract_id);
 
-    // assert_eq!(1, client.version());
-
-    // let new_wasm_hash = install_new_wasm(&env);
-
-    // client.upgrade(&new_wasm_hash);
-    // assert_eq!(2, client.version());
-
-    // // new_v2_fn was added in the new contract, so the existing
-    // // client is out of date. Generate a new one.
-    // let client = new_contract::Client::new(&env, &contract_id);
-    // assert_eq!(1010101, client.new_v2_fn());
-    
-    // // Test upgrade
-    // let new_wasm = BytesN::from_array(&env, &[9u8; 32]);
-    // client.upgrade(&new_wasm.clone());
-
-    // // Verify the upgrade event was emitted
-    // let events = env.events().all();
-    // assert_eq!(
-    //     events.len(),
-    //     2, // One event for initialization, one for upgrade
-    //     "Two events should be emitted (initialization and upgrade)"
-    // );
-
-    // // Verify authorization
-    // let auths = env.auths();
-    // assert_eq!(auths.len(), 2);
+    // Test new functions are available in the contract
+    let words = client.hello(&String::from_str(&env, "StarShop ODBoost"));
+    assert_eq!(
+        words,
+        vec![
+            &env,
+            String::from_str(&env, "Hello"),
+            String::from_str(&env, "StarShop ODBoost"),
+        ]
+    );
 }
 
 #[test]
-fn test_transfer_admin() {
+#[should_panic(expected = "Error(Storage, MissingValue)")]
+fn test_upgrade_with_empty_hash() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register(PaymentContract, ());
+    let client = PaymentContractClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+
+    // Initialize first
+    client.initialize(&admin);
+    assert_eq!(client.get_admin(), admin);
+
+    // Attempt to upgrade with an empty hash
+    assert_eq!(client.upgrade(&BytesN::from_array(&env, &[0; 32])), ());
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #1)")]
+fn test_upgrade_not_initialized() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register(PaymentContract, ());
+    let client = PaymentContractClient::new(&env, &contract_id);
+
+    let new_wasm_hash = install_new_wasm(&env);
+
+    // Attempt to upgrade without initializing
+    assert_eq!(client.upgrade(&new_wasm_hash), ());
+}
+
+#[test]
+fn test_succesful_transfer_admin() {
     let env = Env::default();
     env.mock_all_auths();
 

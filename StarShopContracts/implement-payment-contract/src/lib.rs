@@ -4,6 +4,8 @@ use soroban_sdk::{contract, contracterror, contractimpl, symbol_short, Address, 
 mod dispute;
 mod refund;
 mod transaction;
+#[cfg(test)]
+mod test;
 
 pub use dispute::{DisputeContract, DisputeContractClient, DisputeDecision, DisputeError};
 pub use refund::{RefundContract, RefundContractClient, RefundError};
@@ -89,5 +91,3 @@ impl PaymentContract {
         Ok(())
     }
 }
-
-mod test;
