@@ -3,10 +3,9 @@ use soroban_sdk::{contract, contractimpl, Address, Env, Symbol, Vec};
 
 pub mod limits;
 pub mod ranking;
+mod test;
 pub mod types;
 pub mod vote;
-pub mod test;
-
 use limits::VoteLimiter;
 use ranking::RankingCalculator;
 use types::{Error, VoteType};

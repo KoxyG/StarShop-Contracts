@@ -28,7 +28,7 @@ impl<'a> FollowManager<'a> {
 
         // Validate follow limit
         let follows = self.get_followers(product_id);
-        if (follows.len() as u32) >= DEFAULT_FOLLOW_LIMIT {
+        if follows.len() >= DEFAULT_FOLLOW_LIMIT {
             return Err(FollowError::FollowLimitExceeded);
         }
 

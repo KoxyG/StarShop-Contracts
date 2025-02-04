@@ -19,7 +19,8 @@ impl VoteLimiter {
             .storage()
             .instance()
             .get(&symbol_short!("usr_votes"))
-            .unwrap();
+            .unwrap_or_else(|| Map::new(env));
+
         let mut user_recent_votes = usr_votes.get(voter.clone()).unwrap_or(Vec::new(env));
 
         let now = env.ledger().timestamp();
@@ -43,7 +44,7 @@ impl VoteLimiter {
         user_recent_votes = filtered_votes;
 
         // Check daily limit
-        if user_recent_votes.len() >= DAILY_VOTE_LIMIT as u32 {
+        if user_recent_votes.len() >= DAILY_VOTE_LIMIT {
             return Err(Error::DailyLimitReached);
         }
 
