@@ -3,6 +3,8 @@ use soroban_sdk::{contracterror, contracttype, Address, Map, Symbol};
 #[derive(Clone, Copy, PartialEq, Eq)]
 #[repr(u32)]
 #[contracttype]
+#[derive(Debug)]
+
 pub enum VoteType {
     Upvote = 1,
     Downvote = 2,

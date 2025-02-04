@@ -1,4 +1,4 @@
-use crate::datatype::{FollowCategory, FollowData, FollowError};
+use crate::datatype::{DataKeys, FollowCategory, FollowData, FollowError};
 use crate::interface::FollowOperations;
 use soroban_sdk::{symbol_short, Address, Env, Symbol, Vec};
 
@@ -26,9 +26,15 @@ impl<'a> FollowManager<'a> {
     ) -> Result<(), FollowError> {
         user.require_auth();
 
-        // Validate follow limit
-        let follows = self.get_followers(product_id);
-        if follows.len() >= DEFAULT_FOLLOW_LIMIT {
+        // Validate follow limit for the product
+        let product_followers_key = DataKeys::ProductFollowers(product_id);
+        let mut product_followers: Vec<Address> = self
+            .env
+            .storage()
+            .persistent()
+            .get(&product_followers_key)
+            .unwrap_or_else(|| Vec::new(self.env));
+        if (product_followers.len() as u32) >= DEFAULT_FOLLOW_LIMIT {
             return Err(FollowError::FollowLimitExceeded);
         }
 
@@ -41,11 +47,16 @@ impl<'a> FollowManager<'a> {
             }
         }
 
-        let key = symbol_short!("followers");
-        let mut followers = self.get_followers(product_id);
+        let key = DataKeys::FollowList(user.clone());
+        let mut followers: Vec<FollowData> = self
+            .env
+            .storage()
+            .persistent()
+            .get(&key)
+            .unwrap_or_else(|| Vec::new(self.env));
 
         // Check if user is already following
-        if followers.iter().any(|f| &f.user == user) {
+        if followers.iter().any(|f| f.product_id == product_id) {
             return Err(FollowError::AlreadyFollowing);
         }
 
@@ -58,13 +69,38 @@ impl<'a> FollowManager<'a> {
             expires_at: None,
         });
 
-        // Store updated followers
+        // Store updated user followers
         self.env.storage().persistent().set(&key, &followers);
+
+        // Add user to the product followers list
+        product_followers.push_back(user.clone());
+        self.env
+            .storage()
+            .persistent()
+            .set(&product_followers_key, &product_followers);
+
+        // Add user to the AllUsers list if not already present
+        let all_users_key = DataKeys::AllUsers;
+        let mut all_users: Vec<Address> = self
+            .env
+            .storage()
+            .persistent()
+            .get(&all_users_key)
+            .unwrap_or_else(|| Vec::new(self.env));
+
+        if !all_users.contains(user) {
+            all_users.push_back(user.clone());
+            self.env
+                .storage()
+                .persistent()
+                .set(&all_users_key, &all_users);
+        }
+
         Ok(())
     }
 
-    pub fn get_followers(&self, _product_id: u32) -> Vec<FollowData> {
-        let key = symbol_short!("followers");
+    pub fn get_followers(&self, user: &Address) -> Vec<FollowData> {
+        let key = DataKeys::FollowList(user.clone());
         self.env
             .storage()
             .persistent()
@@ -75,41 +111,37 @@ impl<'a> FollowManager<'a> {
     pub fn remove_follower(&self, user: &Address, product_id: u32) -> Result<(), FollowError> {
         user.require_auth();
 
-        let key = symbol_short!("followers");
-        let follows: Vec<FollowData> = self
+        let key = DataKeys::FollowList(user.clone());
+        let mut followers: Vec<FollowData> = self
             .env
             .storage()
             .persistent()
             .get(&key)
             .unwrap_or_else(|| Vec::new(self.env));
 
-        let mut updated_follows = Vec::new(self.env);
-        let mut found = false;
-
-        for follow in follows.iter() {
-            if &follow.user != user || follow.product_id != product_id {
-                updated_follows.push_back(follow.clone());
-            } else {
-                found = true;
+        // Remove the follower
+        let mut new_followers = Vec::new(self.env);
+        for f in followers.iter() {
+            if f.user != *user || f.product_id != product_id {
+                new_followers.push_back(f.clone());
             }
         }
+        followers = new_followers;
 
-        if !found {
-            return Err(FollowError::NotFollowing);
-        }
+        // Store updated followers
+        self.env.storage().persistent().set(&key, &followers);
 
-        self.env.storage().persistent().set(&key, &updated_follows);
         Ok(())
     }
 
-    pub fn is_following(&self, user: &Address, product_id: u32) -> bool {
-        let follows = self.get_followers(product_id);
+    pub fn is_following(&self, user: &Address, _product_id: u32) -> bool {
+        let follows = self.get_followers(user);
         follows.iter().any(|f| &f.user == user)
     }
 
     #[allow(dead_code)]
     pub fn get_follow_categories(&self, user: &Address, product_id: u32) -> Vec<FollowCategory> {
-        let follows = self.get_followers(product_id);
+        let follows = self.get_followers(user);
 
         if let Some(follow_data) = follows
             .iter()
@@ -152,6 +184,6 @@ impl FollowOperations for FollowSystem {
 
     fn get_followed_products(env: Env, _user: Address) -> Result<Vec<FollowData>, FollowError> {
         let manager = FollowManager::new(&env);
-        Ok(manager.get_followers(0))
+        Ok(manager.get_followers(&_user))
     }
 }

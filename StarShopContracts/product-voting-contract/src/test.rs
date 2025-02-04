@@ -13,6 +13,9 @@ mod tests {
 
     const DAILY_VOTE_LIMIT: u32 = 10;
     const MIN_ACCOUNT_AGE: u64 = 7 * 24 * 60 * 60; // 7 days in seconds
+    const VOTING_PERIOD: u64 = 30 * 24 * 60 * 60; // 30 days in seconds
+    const REVERSAL_WINDOW: u64 = 24 * 60 * 60; // 24 hours in seconds
+
 
     fn select_winner(env: &Env) -> Option<Symbol> {
         let ranked_products = RankingCalculator::get_trending(env);
@@ -348,6 +351,185 @@ mod tests {
             result.is_err(),
             "Should prevent multiple votes after reversal window"
         );
+    }
+
+    #[test]
+    fn test_voting_period_initialization() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let contract_id = env.register(ProductVoting, ());
+        let client = ProductVotingClient::new(&env, &contract_id);
+
+        let id = Symbol::new(&env, "test_product");
+        let name = Symbol::new(&env, "Test_Product");
+        client.init();
+        
+        // Set valid account age
+        env.ledger().set(LedgerInfo {
+            timestamp: env.ledger().timestamp() + MIN_ACCOUNT_AGE,
+            protocol_version: 22,
+            sequence_number: 100,
+            network_id: [0; 32],
+            base_reserve: 10,
+            min_temp_entry_ttl: 1000,
+            min_persistent_entry_ttl: 1000,
+            max_entry_ttl: 6312000,
+            ..Default::default()
+        });
+
+        client.create_product(&id, &name);
+
+        // Use a voter to verify product creation
+        let voter = Address::generate(&env);
+        client.cast_vote(&id, &VoteType::Upvote, &voter);
+
+        // Verify product score after vote
+        let product_score = client.get_product_score(&id);
+        assert_eq!(product_score, 1, "Product score should be 1 after an upvote");
+    }
+
+    #[test]
+    fn test_voting_period_expiration() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let contract_id = env.register(ProductVoting, ());
+        let client = ProductVotingClient::new(&env, &contract_id);
+
+        let id = Symbol::new(&env, "test_product");
+        let name = Symbol::new(&env, "Test_Product");
+        client.init();
+
+        // Set valid account age
+        env.ledger().set(LedgerInfo {
+            timestamp: env.ledger().timestamp() + MIN_ACCOUNT_AGE,
+            protocol_version: 22,
+            sequence_number: 100,
+            network_id: [0; 32],
+            base_reserve: 10,
+            min_temp_entry_ttl: 1000,
+            min_persistent_entry_ttl: 1000,
+            max_entry_ttl: 6312000,
+            ..Default::default()
+        });
+
+        client.create_product(&id, &name);
+
+        let voter = Address::generate(&env);
+        client.cast_vote(&id, &VoteType::Upvote, &voter);
+
+        // Set timestamp past voting period
+        env.ledger().set(LedgerInfo {
+            timestamp: env.ledger().timestamp() + VOTING_PERIOD + 1,
+            protocol_version: 22,
+            sequence_number: 100,
+            network_id: [0; 32],
+            base_reserve: 10,
+            min_temp_entry_ttl: 1000,
+            min_persistent_entry_ttl: 1000,
+            max_entry_ttl: 6312000,
+            ..Default::default()
+        });
+
+        // Attempt to vote after voting period should fail
+        let result = client.try_cast_vote(&id, &VoteType::Upvote, &voter);
+        assert!(result.is_err(), "Voting should not be allowed after voting period");
+    }
+
+    #[test]
+    fn test_vote_reversal_window() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let contract_id = env.register(ProductVoting, ());
+        let client = ProductVotingClient::new(&env, &contract_id);
+
+        let id = Symbol::new(&env, "test_product");
+        let name = Symbol::new(&env, "Test_Product");
+        client.init();
+
+        // Set valid account age
+        env.ledger().set(LedgerInfo {
+            timestamp: env.ledger().timestamp() + MIN_ACCOUNT_AGE,
+            protocol_version: 22,
+            sequence_number: 100,
+            network_id: [0; 32],
+            base_reserve: 10,
+            min_temp_entry_ttl: 1000,
+            min_persistent_entry_ttl: 1000,
+            max_entry_ttl: 6312000,
+            ..Default::default()
+        });
+
+        client.create_product(&id, &name);
+
+        let voter = Address::generate(&env);
+
+        // Initial upvote
+        client.cast_vote(&id, &VoteType::Upvote, &voter);
+
+        // Attempt to downvote within reversal window
+        client.cast_vote(&id, &VoteType::Downvote, &voter);
+
+        // Set timestamp past reversal window
+        env.ledger().set(LedgerInfo {
+            timestamp: env.ledger().timestamp() + REVERSAL_WINDOW + 1,
+            protocol_version: 22,
+            sequence_number: 100,
+            network_id: [0; 32],
+            base_reserve: 10,
+            min_temp_entry_ttl: 1000,
+            min_persistent_entry_ttl: 1000,
+            max_entry_ttl: 6312000,
+            ..Default::default()
+        });
+
+        // Attempting another vote after reversal window should fail
+        let result = client.try_cast_vote(&id, &VoteType::Upvote, &voter);
+        assert!(result.is_err(), "Voting should not be allowed after reversal window");
+    }
+
+    #[test]
+    fn test_product_voting_state_consistency() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let contract_id = env.register(ProductVoting, ());
+        let client = ProductVotingClient::new(&env, &contract_id);
+    
+        let id = Symbol::new(&env, "test_product");
+        let name = Symbol::new(&env, "Test_Product");
+        client.init();
+        client.create_product(&id, &name);
+    
+        // Set initial timestamp for valid account age
+        let initial_time = 1000000;
+        env.ledger().set(LedgerInfo {
+            timestamp: initial_time + 8 * 24 * 60 * 60, // Setting valid account age
+            protocol_version: 22,
+            sequence_number: 100,
+            network_id: [0; 32],
+            base_reserve: 10,
+            min_temp_entry_ttl: 1000,
+            min_persistent_entry_ttl: 1000,
+            max_entry_ttl: 6312000,
+            ..Default::default()
+        });
+    
+        // Generate test voters
+        let voters = [
+            Address::generate(&env),
+            Address::generate(&env),
+            Address::generate(&env),
+        ];
+    
+        // Cast votes: 2 upvotes, 1 downvote
+        client.cast_vote(&id, &VoteType::Upvote, &voters[0]);
+        client.cast_vote(&id, &VoteType::Upvote, &voters[1]);
+        client.cast_vote(&id, &VoteType::Downvote, &voters[2]);
+    
+        // The score should reflect the upvotes and downvotes
+        let score = client.get_product_score(&id);
+    
+        // Correct assertion with expected behavior
+        assert_eq!(score, 1, "Product score should reflect multiple votes");
     }
 
     #[test]
