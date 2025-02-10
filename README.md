@@ -16,13 +16,13 @@
 </table>
 
 # Table of Contents
- 1. 📜 [Prerequisites](#prerequisites) 
- 2. 🖥️ [Environment Setup](#environment-setup) 
- 3. 💳 [Wallet Configuration](#wallet-configuration)
- 4. 🔗 [Compilation](#compilation)
- 5. 🚀 [Deployment](#deployment)
- 6. 🕵🏻 [Testing and Execution](#testing-and-execution)
- 7. 🩺 [Troubleshooting](#troubleshooting)
+ 1. 📜 [Prerequisites](#-prerequisites) 
+ 2. 🖥️ [Environment Setup](#-environment-setup) 
+ 3. 💳 [Wallet Configuration](#-wallet-configuration)
+ 4. 🔗 [Compilation](#-compilation)
+ 5. 🚀 [Deployment](#-deployment)
+ 6. 🕵🏻 [Testing and Execution](#-testing-and-execution)
+ 7. 🩺 [Troubleshooting](#-troubleshooting)
 
 ---
 
