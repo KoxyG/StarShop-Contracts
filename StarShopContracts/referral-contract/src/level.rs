@@ -7,7 +7,7 @@ impl LevelManagementModule {
     pub fn check_and_update_level(env: &Env, user_data: &mut UserData) -> Result<bool, Error> {
         let requirements: LevelRequirements = env
             .storage()
-            .persistent()
+            .instance()
             .get(&DataKey::LevelRequirements)
             .ok_or(Error::InvalidLevelRequirements)?;
 

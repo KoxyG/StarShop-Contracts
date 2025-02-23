@@ -27,7 +27,7 @@ impl RewardOperations for RewardModule {
         // Get reward rates
         let rates: RewardRates = env
             .storage()
-            .persistent()
+            .instance()
             .get(&DataKey::RewardRates)
             .ok_or(Error::InvalidRewardRates)?;
 
@@ -105,7 +105,7 @@ impl RewardOperations for RewardModule {
 
         let reward_token = env
             .storage()
-            .persistent()
+            .instance()
             .get(&DataKey::RewardToken)
             .ok_or(Error::InvalidRewardToken)?;
 
@@ -140,7 +140,7 @@ impl RewardOperations for RewardModule {
         let mut milestone_id = 0;
         while env
             .storage()
-            .persistent()
+            .instance()
             .has(&DataKey::Milestone(milestone_id))
         {
             // check if milestone already achieved
@@ -151,7 +151,7 @@ impl RewardOperations for RewardModule {
 
             let milestone: Milestone = env
                 .storage()
-                .persistent()
+                .instance()
                 .get(&DataKey::Milestone(milestone_id))
                 .unwrap();
 

@@ -9,7 +9,7 @@ impl MetricsOperations for MetricsModule {
     fn get_total_users(env: Env) -> Result<u32, Error> {
         Ok(env
             .storage()
-            .persistent()
+            .instance()
             .get(&DataKey::TotalUsers)
             .unwrap_or(0))
     }
@@ -17,8 +17,8 @@ impl MetricsOperations for MetricsModule {
     fn get_total_distributed_rewards(env: Env) -> Result<i128, Error> {
         Ok(env
             .storage()
-            .persistent()
-            .get(&DataKey::TotalDistributedRewards)
+            .instance()
+            .get::<_, i128>(&DataKey::TotalDistributedRewards)
             .unwrap_or(0))
     }
 
@@ -75,22 +75,24 @@ impl MetricsModule {
     pub fn increment_total_users(env: &Env) {
         let current = env
             .storage()
-            .persistent()
+            .instance()
             .get(&DataKey::TotalUsers)
             .unwrap_or(0);
+
         env.storage()
-            .persistent()
+            .instance()
             .set(&DataKey::TotalUsers, &(current + 1));
     }
 
     pub fn add_distributed_rewards(env: &Env, amount: i128) {
         let current = env
             .storage()
-            .persistent()
+            .instance()
             .get(&DataKey::TotalDistributedRewards)
             .unwrap_or(0);
+
         env.storage()
-            .persistent()
+            .instance()
             .set(&DataKey::TotalDistributedRewards, &(current + amount));
     }
 }

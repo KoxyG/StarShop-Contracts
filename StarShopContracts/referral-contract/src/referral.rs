@@ -9,6 +9,31 @@ use soroban_sdk::{Address, Env, String, Vec};
 pub struct ReferralModule;
 
 impl ReferralOperations for ReferralModule {
+    fn initialize(env: &Env, admin: &Address) -> Result<(), Error> {
+        admin.require_auth();
+
+        // Create new user data
+        let user_data = UserData {
+            address: admin.clone(),
+            referrer: None,
+            direct_referrals: Vec::new(&env),
+            team_size: 0,
+            pending_rewards: 0,
+            total_rewards: 0,
+            level: UserLevel::Basic,
+            verification_status: VerificationStatus::Verified,
+            identity_proof: String::from_str(&env, ""),
+            join_date: env.ledger().timestamp(),
+        };
+
+        // Store user data
+        env.storage()
+            .persistent()
+            .set(&DataKey::User(admin.clone()), &user_data);
+
+        Ok(())
+    }
+
     fn register_with_referral(
         env: Env,
         user: Address,
@@ -33,7 +58,7 @@ impl ReferralOperations for ReferralModule {
         ensure_user_verified(&referrer_data)?;
 
         // Create new user data
-        let mut user_data = UserData {
+        let user_data = UserData {
             address: user.clone(),
             referrer: Some(referrer_address.clone()),
             direct_referrals: Vec::new(&env),
@@ -55,7 +80,7 @@ impl ReferralOperations for ReferralModule {
         Self::update_referrer_stats(&env, &referrer_address, &user)?;
 
         // Submit verification automatically
-        VerificationModule::process_verification(&env, &mut user_data, &identity_proof)?;
+        VerificationModule::add_to_pending_verifications(&env, &user);
 
         // Increment total users
         MetricsModule::increment_total_users(&env);
@@ -85,6 +110,11 @@ impl ReferralOperations for ReferralModule {
         let user_data = get_user_data(&env, &user)?;
         Ok(user_data.team_size)
     }
+
+    fn get_user_level(env: Env, user: Address) -> Result<UserLevel, Error> {
+        let user_data = get_user_data(&env, &user)?;
+        Ok(user_data.level)
+    }
 }
 
 // Helper functions
@@ -98,8 +128,6 @@ impl ReferralModule {
 
         // Add to direct referrals
         referrer_data.direct_referrals.push_back(new_user.clone());
-
-        // Update team size
         referrer_data.team_size += 1;
 
         // Check for level update

@@ -66,7 +66,6 @@ pub enum DataKey {
     User(Address),                      // User data storage
     Milestone(u32),                     // Milestone data
     ContractPaused,                     // Contract pause status
-    ReferralCode(String),               // Referral code mapping
     TotalDistributedRewards,            // Total rewards given
     UserAchievedMilestones(Address),    // User's completed milestones
     PendingVerifications(Vec<Address>), // Users awaiting verification
@@ -105,23 +104,22 @@ pub struct LevelRequirements {
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 #[repr(u32)]
 pub enum Error {
-    AlreadyInitialized = 1,        // Contract already setup
-    Unauthorized = 2,              // Caller lacks permission
-    AlreadyRegistered = 3,         // User already exists
-    InvalidReferralCode = 4,       // Invalid/expired code
+    NotInitialized = 1,            // Contract not initialized
+    AlreadyInitialized = 2,        // Contract already setup
+    Unauthorized = 3,              // Caller lacks permission
+    AlreadyRegistered = 4,         // User already exists
     UserNotFound = 5,              // User doesn't exist
     MilestoneNotFound = 6,         // Milestone not found
     InvalidAmount = 7,             // Invalid reward amount
     VerificationRequired = 8,      // Action needs verification
     AlreadyVerified = 9,           // Already verified
     InvalidIdentityProof = 10,     // Invalid KYC documents
-    ReferralCodeExists = 11,       // Code already taken
-    InsufficientRewards = 12,      // Not enough rewards
-    InvalidRewardRates = 13,       // Invalid commission rates
-    MaxRewardExceeded = 14,        // Reward cap reached
-    ReferrerNotVerified = 15,      // Referrer needs verification
-    ReferrerNotFound = 16,         // Referrer doesn't exist
-    InvalidLevelRequirements = 17, // Invalid level criteria
-    ContractPaused = 18,           // Contract is paused
-    InvalidRewardToken = 19,       // Invalid token address
+    InsufficientRewards = 11,      // Not enough rewards
+    InvalidRewardRates = 12,       // Invalid commission rates
+    MaxRewardExceeded = 13,        // Reward cap reached
+    ReferrerNotVerified = 14,      // Referrer needs verification
+    ReferrerNotFound = 15,         // Referrer doesn't exist
+    InvalidLevelRequirements = 16, // Invalid level criteria
+    ContractPaused = 17,           // Contract is paused
+    InvalidRewardToken = 18,       // Invalid token address
 }

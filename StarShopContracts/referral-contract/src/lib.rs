@@ -20,7 +20,8 @@ use metrics::MetricsModule;
 use referral::ReferralModule;
 use rewards::RewardModule;
 use types::{
-    Error, LevelCriteria, LevelRequirements, Milestone, RewardRates, UserData, VerificationStatus,
+    Error, LevelCriteria, LevelRequirements, Milestone, RewardRates, UserData, UserLevel,
+    VerificationStatus,
 };
 use verification::VerificationModule;
 
@@ -32,7 +33,6 @@ impl ReferralContract {
     /// Initializes the referral contract with an admin address, reward token, and default level requirements
     ///
     /// # Arguments
-    /// * `env` - The contract environment
     /// * `admin` - The address of the contract administrator
     /// * `reward_token` - The address of the token used for rewards
     pub fn initialize(env: Env, admin: Address, reward_token: Address) -> Result<(), Error> {
@@ -53,23 +53,26 @@ impl ReferralContract {
                 required_total_rewards: 20000,
             },
         };
-
+        ReferralModule::initialize(&env, &admin)?;
         AdminModule::initialize(env, admin, reward_token, default_requirements)
     }
 
     /// Sets the reward rates for different referral levels
     ///
     /// # Arguments
-    /// * `env` - The contract environment
     /// * `rates` - The new reward rates structure
     pub fn set_reward_rates(env: Env, rates: RewardRates) -> Result<(), Error> {
         AdminModule::set_reward_rates(env, rates)
     }
 
+    /// get admin address
+    pub fn get_admin(env: Env) -> Result<Address, Error> {
+        AdminModule::get_admin(env)
+    }
+
     /// Adds a new milestone to the referral program
     ///
     /// # Arguments
-    /// * `env` - The contract environment
     /// * `milestone` - The milestone to be added
     pub fn add_milestone(env: Env, milestone: Milestone) -> Result<(), Error> {
         AdminModule::add_milestone(env, milestone)
@@ -78,7 +81,6 @@ impl ReferralContract {
     /// Removes a milestone from the referral program
     ///
     /// # Arguments
-    /// * `env` - The contract environment
     /// * `milestone_id` - The ID of the milestone to remove
     pub fn remove_milestone(env: Env, milestone_id: u32) -> Result<(), Error> {
         AdminModule::remove_milestone(env, milestone_id)
@@ -87,7 +89,6 @@ impl ReferralContract {
     /// Updates an existing milestone
     ///
     /// # Arguments
-    /// * `env` - The contract environment
     /// * `milestone_id` - The ID of the milestone to update
     /// * `milestone` - The new milestone data
     pub fn update_milestone(
@@ -108,10 +109,14 @@ impl ReferralContract {
         AdminModule::resume_contract(env)
     }
 
+    /// Check if contract is paused
+    pub fn get_paused_state(env: Env) -> Result<bool, Error> {
+        AdminModule::get_paused_state(env)
+    }
+
     /// Transfers admin rights to a new address
     ///
     /// # Arguments
-    /// * `env` - The contract environment
     /// * `new_admin` - The address of the new administrator
     pub fn transfer_admin(env: Env, new_admin: Address) -> Result<(), Error> {
         AdminModule::transfer_admin(env, new_admin)
@@ -120,7 +125,6 @@ impl ReferralContract {
     /// Sets or updates the reward token address
     ///
     /// # Arguments
-    /// * `env` - The contract environment
     /// * `token` - The address of the new reward token
     pub fn set_reward_token(env: Env, token: Address) -> Result<(), Error> {
         AdminModule::set_reward_token(env, token)
@@ -129,7 +133,6 @@ impl ReferralContract {
     /// Updates the requirements for different referral levels
     ///
     /// # Arguments
-    /// * `env` - The contract environment
     /// * `requirements` - The new level requirements
     pub fn set_level_requirements(env: Env, requirements: LevelRequirements) -> Result<(), Error> {
         AdminModule::set_level_requirements(env, requirements)
@@ -138,7 +141,6 @@ impl ReferralContract {
     /// Submits a verification request for a user
     ///
     /// # Arguments
-    /// * `env` - The contract environment
     /// * `user` - The address of the user to verify
     /// * `identity_proof` - Proof of identity for verification
     pub fn submit_verification(
@@ -152,7 +154,6 @@ impl ReferralContract {
     /// Approves a user's verification request
     ///
     /// # Arguments
-    /// * `env` - The contract environment
     /// * `user` - The address of the user to approve
     pub fn approve_verification(env: Env, user: Address) -> Result<(), Error> {
         VerificationModule::approve_verification(env, user)
@@ -161,7 +162,6 @@ impl ReferralContract {
     /// Rejects a user's verification request with a reason
     ///
     /// # Arguments
-    /// * `env` - The contract environment
     /// * `user` - The address of the user to reject
     /// * `reason` - The reason for rejection
     pub fn reject_verification(env: Env, user: Address, reason: String) -> Result<(), Error> {
@@ -171,7 +171,6 @@ impl ReferralContract {
     /// Retrieves the verification status of a user
     ///
     /// # Arguments
-    /// * `env` - The contract environment
     /// * `user` - The address of the user to check
     pub fn get_verification_status(env: Env, user: Address) -> Result<VerificationStatus, Error> {
         VerificationModule::get_verification_status(env, user)
@@ -185,7 +184,6 @@ impl ReferralContract {
     /// Registers a new user with a referrer
     ///
     /// # Arguments
-    /// * `env` - The contract environment
     /// * `user` - The address of the new user
     /// * `referrer_address` - The address of the referrer
     /// * `identity_proof` - Proof of identity for verification
@@ -201,7 +199,6 @@ impl ReferralContract {
     /// Checks if a user is verified
     ///
     /// # Arguments
-    /// * `env` - The contract environment
     /// * `user` - The address of the user to check
     pub fn is_user_verified(env: Env, user: Address) -> Result<bool, Error> {
         ReferralModule::is_user_verified(env, user)
@@ -210,7 +207,6 @@ impl ReferralContract {
     /// Checks if a user is registered in the system
     ///
     /// # Arguments
-    /// * `env` - The contract environment
     /// * `user` - The address of the user to check
     pub fn is_user_registered(env: Env, user: Address) -> Result<bool, Error> {
         ReferralModule::is_user_registered(env, user)
@@ -219,7 +215,6 @@ impl ReferralContract {
     /// Retrieves detailed information about a user
     ///
     /// # Arguments
-    /// * `env` - The contract environment
     /// * `user` - The address of the user
     pub fn get_user_info(env: Env, user: Address) -> Result<UserData, Error> {
         ReferralModule::get_user_info(env, user)
@@ -228,7 +223,6 @@ impl ReferralContract {
     /// Gets a list of direct referrals for a user
     ///
     /// # Arguments
-    /// * `env` - The contract environment
     /// * `user` - The address of the user
     pub fn get_direct_referrals(env: Env, user: Address) -> Result<Vec<Address>, Error> {
         ReferralModule::get_direct_referrals(env, user)
@@ -237,7 +231,6 @@ impl ReferralContract {
     /// Gets the total team size (direct and indirect referrals) for a user
     ///
     /// # Arguments
-    /// * `env` - The contract environment
     /// * `user` - The address of the user
     pub fn get_team_size(env: Env, user: Address) -> Result<u32, Error> {
         ReferralModule::get_team_size(env, user)
@@ -246,7 +239,6 @@ impl ReferralContract {
     /// Distributes rewards to a user and their upline
     ///
     /// # Arguments
-    /// * `env` - The contract environment
     /// * `user` - The address of the user
     /// * `amount` - The amount of rewards to distribute
     pub fn distribute_rewards(env: Env, user: Address, amount: i128) -> Result<(), Error> {
@@ -256,7 +248,6 @@ impl ReferralContract {
     /// Allows a user to claim their accumulated rewards
     ///
     /// # Arguments
-    /// * `env` - The contract environment
     /// * `user` - The address of the user claiming rewards
     pub fn claim_rewards(env: Env, user: Address) -> Result<i128, Error> {
         RewardModule::claim_rewards(env, user)
@@ -265,7 +256,6 @@ impl ReferralContract {
     /// Gets the amount of pending rewards for a user
     ///
     /// # Arguments
-    /// * `env` - The contract environment
     /// * `user` - The address of the user
     pub fn get_pending_rewards(env: Env, user: Address) -> Result<i128, Error> {
         RewardModule::get_pending_rewards(env, user)
@@ -274,7 +264,6 @@ impl ReferralContract {
     /// Gets the total rewards earned by a user
     ///
     /// # Arguments
-    /// * `env` - The contract environment
     /// * `user` - The address of the user
     pub fn get_total_rewards(env: Env, user: Address) -> Result<i128, Error> {
         RewardModule::get_total_rewards(env, user)
@@ -283,7 +272,6 @@ impl ReferralContract {
     /// Checks and rewards any achieved milestones for a user
     ///
     /// # Arguments
-    /// * `env` - The contract environment
     /// * `user` - The address of the user
     pub fn check_and_reward_milestone(env: Env, user: Address) -> Result<(), Error> {
         RewardModule::check_and_reward_milestone(env, user)
@@ -309,10 +297,17 @@ impl ReferralContract {
     /// Gets the referral conversion rate for a user. verified users/registered users
     ///
     /// # Arguments
-    /// * `env` - The contract environment
     /// * `user` - The address of the user
     pub fn get_referral_conversion_rate(env: Env, user: Address) -> Result<u32, Error> {
         MetricsModule::get_referral_conversion_rate(env, user)
+    }
+
+    /// Gets the level of a user
+    ///
+    /// # Arguments
+    /// * `user` - The address of the user
+    pub fn get_user_level(env: Env, user: Address) -> Result<UserLevel, Error> {
+        ReferralModule::get_user_level(env, user)
     }
 }
 

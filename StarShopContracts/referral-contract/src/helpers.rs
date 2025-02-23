@@ -25,7 +25,11 @@ pub fn ensure_user_verified(user_data: &UserData) -> Result<(), Error> {
 }
 
 pub fn verify_admin(env: &Env) -> Result<(), Error> {
-    let admin: Address = env.storage().instance().get(&DataKey::Admin).unwrap();
+    let admin: Address = env
+        .storage()
+        .instance()
+        .get(&DataKey::Admin)
+        .ok_or(Error::NotInitialized)?;
     admin.require_auth();
     Ok(())
 }

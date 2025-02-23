@@ -52,7 +52,7 @@ impl VerificationOperations for VerificationModule {
 
         Ok(env
             .storage()
-            .persistent()
+            .instance()
             .get(&DataKey::PendingVerifications(Vec::new(&env)))
             .unwrap_or_else(|| Vec::new(&env)))
     }
@@ -83,23 +83,23 @@ impl VerificationModule {
     }
 
     //add user to pending verifications
-    fn add_to_pending_verifications(env: &Env, user: &Address) {
+    pub fn add_to_pending_verifications(env: &Env, user: &Address) {
         let mut pending = env
             .storage()
-            .persistent()
+            .instance()
             .get::<_, Vec<Address>>(&DataKey::PendingVerifications(Vec::new(env)))
             .unwrap_or_else(|| Vec::new(env));
 
         pending.push_back(user.clone());
         env.storage()
-            .persistent()
+            .instance()
             .set(&DataKey::PendingVerifications(Vec::new(env)), &pending);
     }
 
     fn remove_from_pending_verifications(env: &Env, user: &Address) {
         let pending = env
             .storage()
-            .persistent()
+            .instance()
             .get::<_, Vec<Address>>(&DataKey::PendingVerifications(Vec::new(env)))
             .unwrap_or_else(|| Vec::new(env));
 
@@ -112,7 +112,7 @@ impl VerificationModule {
         }
 
         env.storage()
-            .persistent()
+            .instance()
             .set(&DataKey::PendingVerifications(Vec::new(env)), &new_pending);
     }
 }

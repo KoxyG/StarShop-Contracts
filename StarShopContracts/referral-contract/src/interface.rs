@@ -1,5 +1,5 @@
 use crate::types::{
-    Error, LevelRequirements, Milestone, RewardRates, UserData, VerificationStatus,
+    Error, LevelRequirements, Milestone, RewardRates, UserData, UserLevel, VerificationStatus,
 };
 use soroban_sdk::{Address, Env, String, Vec};
 
@@ -23,6 +23,9 @@ pub trait VerificationOperations {
 
 /// Manages referral operations and relationships
 pub trait ReferralOperations {
+    /// Initialize contract
+    fn initialize(env: &Env, admin: &Address) -> Result<(), Error>;
+
     /// Register new user with referral
     fn register_with_referral(
         env: Env,
@@ -45,6 +48,9 @@ pub trait ReferralOperations {
 
     /// Get user's team size (all levels)
     fn get_team_size(env: Env, user: Address) -> Result<u32, Error>;
+
+    /// Get user's level
+    fn get_user_level(env: Env, user: Address) -> Result<UserLevel, Error>;
 }
 
 /// Handles reward calculations and distributions
@@ -75,6 +81,9 @@ pub trait AdminOperations {
         level_requirements: LevelRequirements,
     ) -> Result<(), Error>;
 
+    /// get admin address
+    fn get_admin(env: Env) -> Result<Address, Error>;
+
     /// Set reward rates for different levels
     fn set_reward_rates(env: Env, rates: RewardRates) -> Result<(), Error>;
 
@@ -98,6 +107,9 @@ pub trait AdminOperations {
 
     /// Resume contract operations
     fn resume_contract(env: Env) -> Result<(), Error>;
+
+    /// Check if contract is paused
+    fn get_paused_state(env: Env) -> Result<bool, Error>;
 
     /// Transfer admin rights to new address
     fn transfer_admin(env: Env, new_admin: Address) -> Result<(), Error>;

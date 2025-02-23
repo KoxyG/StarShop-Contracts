@@ -13,26 +13,26 @@ impl AdminOperations for AdminModule {
         level_requirements: LevelRequirements,
     ) -> Result<(), Error> {
         // Check if contract is already initialized
-        if env.storage().persistent().has(&DataKey::Admin) {
+        if env.storage().instance().has(&DataKey::Admin) {
             return Err(Error::AlreadyInitialized);
         }
 
         // Store admin address
-        env.storage().persistent().set(&DataKey::Admin, &admin);
+        env.storage().instance().set(&DataKey::Admin, &admin);
 
         // Initialize contract as active
         env.storage()
-            .persistent()
+            .instance()
             .set(&DataKey::ContractPaused, &false);
 
         // Store reward token
         env.storage()
-            .persistent()
+            .instance()
             .set(&DataKey::RewardToken, &reward_token);
 
         // Store level requirements
         env.storage()
-            .persistent()
+            .instance()
             .set(&DataKey::LevelRequirements, &level_requirements);
 
         Ok(())
@@ -40,9 +40,7 @@ impl AdminOperations for AdminModule {
 
     fn set_reward_rates(env: Env, rates: RewardRates) -> Result<(), Error> {
         verify_admin(&env)?;
-        env.storage()
-            .persistent()
-            .set(&DataKey::RewardRates, &rates);
+        env.storage().instance().set(&DataKey::RewardRates, &rates);
         Ok(())
     }
 
@@ -51,13 +49,13 @@ impl AdminOperations for AdminModule {
 
         // Find next available milestone ID
         let mut next_id = 0;
-        while env.storage().persistent().has(&DataKey::Milestone(next_id)) {
+        while env.storage().instance().has(&DataKey::Milestone(next_id)) {
             next_id += 1;
         }
 
         // Store the milestone with its ID
         env.storage()
-            .persistent()
+            .instance()
             .set(&DataKey::Milestone(next_id), &milestone);
 
         Ok(())
@@ -68,14 +66,14 @@ impl AdminOperations for AdminModule {
 
         if !env
             .storage()
-            .persistent()
+            .instance()
             .has(&DataKey::Milestone(milestone_id))
         {
             return Err(Error::MilestoneNotFound);
         }
 
         env.storage()
-            .persistent()
+            .instance()
             .remove(&DataKey::Milestone(milestone_id));
         Ok(())
     }
@@ -89,14 +87,14 @@ impl AdminOperations for AdminModule {
 
         if !env
             .storage()
-            .persistent()
+            .instance()
             .has(&DataKey::Milestone(milestone_id))
         {
             return Err(Error::MilestoneNotFound);
         }
 
         env.storage()
-            .persistent()
+            .instance()
             .set(&DataKey::Milestone(milestone_id), &new_milestone);
 
         Ok(())
@@ -105,7 +103,7 @@ impl AdminOperations for AdminModule {
     fn pause_contract(env: Env) -> Result<(), Error> {
         verify_admin(&env)?;
         env.storage()
-            .persistent()
+            .instance()
             .set(&DataKey::ContractPaused, &true);
         Ok(())
     }
@@ -113,14 +111,18 @@ impl AdminOperations for AdminModule {
     fn resume_contract(env: Env) -> Result<(), Error> {
         verify_admin(&env)?;
         env.storage()
-            .persistent()
+            .instance()
             .set(&DataKey::ContractPaused, &false);
         Ok(())
     }
 
+    fn get_paused_state(env: Env) -> Result<bool, Error> {
+        Ok(Self::is_contract_paused(&env))
+    }
+
     fn transfer_admin(env: Env, new_admin: Address) -> Result<(), Error> {
         verify_admin(&env)?;
-        env.storage().persistent().set(&DataKey::Admin, &new_admin);
+        env.storage().instance().set(&DataKey::Admin, &new_admin);
         Ok(())
     }
 
@@ -133,17 +135,19 @@ impl AdminOperations for AdminModule {
         }
 
         env.storage()
-            .persistent()
+            .instance()
             .set(&DataKey::LevelRequirements, &requirements);
         Ok(())
     }
 
     fn set_reward_token(env: Env, token: Address) -> Result<(), Error> {
         verify_admin(&env)?;
-        env.storage()
-            .persistent()
-            .set(&DataKey::RewardToken, &token);
+        env.storage().instance().set(&DataKey::RewardToken, &token);
         Ok(())
+    }
+
+    fn get_admin(env: Env) -> Result<Address, Error> {
+        Ok(env.storage().instance().get(&DataKey::Admin).unwrap())
     }
 }
 
@@ -151,7 +155,7 @@ impl AdminOperations for AdminModule {
 impl AdminModule {
     pub fn is_contract_paused(env: &Env) -> bool {
         env.storage()
-            .persistent()
+            .instance()
             .get(&DataKey::ContractPaused)
             .unwrap_or(false)
     }
