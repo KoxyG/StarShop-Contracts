@@ -17,7 +17,7 @@ mod test_setup {
         // Initialize first
         let _ = client.initialize(&admin, &token.address());
 
-        // Set default reward rates after initialization
+        // Set default reward rates after initializationclea
         let rates = RewardRates {
             level1: 500, // 5%
             level2: 200, // 2%
@@ -208,6 +208,26 @@ mod test_levels {
         let (contract, admin, _) = test_setup::setup_contract(&env);
 
         env.mock_all_auths();
+
+        let new_requirements = LevelRequirements {
+            silver: LevelCriteria {
+                required_direct_referrals: 5,
+                required_team_size: 5,
+                required_total_rewards: 0,
+            },
+            gold: LevelCriteria {
+                required_direct_referrals: 10,
+                required_team_size: 50,
+                required_total_rewards: 5000,
+            },
+            platinum: LevelCriteria {
+                required_direct_referrals: 20,
+                required_team_size: 100,
+                required_total_rewards: 20000,
+            },
+        };
+        contract.set_level_requirements(&new_requirements);
+
         // First user referred by admin
         let user = Address::generate(&env);
         contract.register_with_referral(&user, &admin, &String::from_str(&env, "proof1"));

@@ -10,8 +10,8 @@ impl MetricsOperations for MetricsModule {
         Ok(env
             .storage()
             .instance()
-            .get(&DataKey::TotalUsers)
-            .unwrap_or(0))
+            .get::<_, u32>(&DataKey::TotalUsers)
+            .unwrap_or_default())
     }
 
     fn get_total_distributed_rewards(env: Env) -> Result<i128, Error> {
@@ -76,8 +76,8 @@ impl MetricsModule {
         let current = env
             .storage()
             .instance()
-            .get(&DataKey::TotalUsers)
-            .unwrap_or(0);
+            .get::<_, u32>(&DataKey::TotalUsers)
+            .unwrap_or_default();
 
         env.storage()
             .instance()
@@ -88,8 +88,8 @@ impl MetricsModule {
         let current = env
             .storage()
             .instance()
-            .get(&DataKey::TotalDistributedRewards)
-            .unwrap_or(0);
+            .get::<_, i128>(&DataKey::TotalDistributedRewards)
+            .unwrap_or_default();
 
         env.storage()
             .instance()

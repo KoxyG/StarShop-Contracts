@@ -31,6 +31,9 @@ impl ReferralOperations for ReferralModule {
             .persistent()
             .set(&DataKey::User(admin.clone()), &user_data);
 
+        // Increment total users
+        MetricsModule::increment_total_users(&env);
+
         Ok(())
     }
 
