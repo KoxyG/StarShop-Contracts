@@ -374,7 +374,7 @@ fn test_panic_resolve_dispute_not_authenticated() {
     client.resolve_dispute(
         &token_address,
         &arbitrator,
-        &buyer,
+        &buyer,                    
         &seller,
         &refund_amount,
         &DisputeDecision::RefundBuyer,
@@ -465,7 +465,7 @@ fn test_resolve_dispute_refund_buyer() {
     let buyer = <Address>::generate(&env);
     let seller = <Address>::generate(&env);
     let arbitrator = <Address>::generate(&env);
-    let refund_amount = 1000i128;
+    let refund_amount = 100i128;
 
     // Mock the token client for transferring tokens
     let token_contract = env.register_stellar_asset_contract_v2(admin.clone());
@@ -495,6 +495,39 @@ fn test_resolve_dispute_refund_buyer() {
         &DisputeDecision::RefundBuyer,
     );
 
+    // Verify signed transactions
+    assert_eq!(
+        env.auths(),
+        std::vec![
+            (
+                arbitrator.clone(),
+                AuthorizedInvocation {
+                    function: AuthorizedFunction::Contract((
+                        contract_id.clone(),
+                        Symbol::new(&env, "resolve_dispute"),
+                        (
+                            token_contract.address().clone(),
+                            arbitrator.clone(),
+                            buyer.clone(),
+                            seller.clone(),
+                            refund_amount,
+                            DisputeDecision::RefundBuyer as u32
+                        )
+                            .into_val(&env),
+                    )),
+                    sub_invocations: std::vec![AuthorizedInvocation {
+                        function: AuthorizedFunction::Contract((
+                            token_contract.address().clone(),
+                            symbol_short!("transfer"),
+                            (arbitrator.clone(), buyer.clone(), refund_amount).into_val(&env),
+                        )),
+                        sub_invocations: std::vec![],
+                    }]
+                }
+            )
+        ]
+    );
+
     // Check the balance after the transfer
     let arbitrator_balance_after = token_client.balance(&arbitrator);
     assert_eq!(arbitrator_balance_after, 0);
@@ -521,7 +554,7 @@ fn test_resolve_dispute_pay_seller() {
     let buyer = <Address>::generate(&env);
     let seller = <Address>::generate(&env);
     let arbitrator = <Address>::generate(&env);
-    let refund_amount = 1000i128;
+    let refund_amount = 100i128;
 
     // Mock the token client for transferring tokens
     let token_contract = env.register_stellar_asset_contract_v2(admin.clone());
@@ -541,7 +574,7 @@ fn test_resolve_dispute_pay_seller() {
     let seller_balance_before = token_client.balance(&seller);
     assert_eq!(seller_balance_before, 0);
 
-    // Simulate resolving a dispute in favor of the buyer
+    // Simulate resolving a dispute in favor of the seller
     client.resolve_dispute(
         &token_address,
         &arbitrator,
@@ -551,13 +584,46 @@ fn test_resolve_dispute_pay_seller() {
         &DisputeDecision::PaySeller,
     );
 
+    // Verify signed transactions
+    assert_eq!(
+        env.auths(),
+        std::vec![
+            (
+                arbitrator.clone(),
+                AuthorizedInvocation {
+                    function: AuthorizedFunction::Contract((
+                        contract_id.clone(),
+                        Symbol::new(&env, "resolve_dispute"),
+                        (
+                            token_contract.address().clone(),
+                            arbitrator.clone(),
+                            buyer.clone(),
+                            seller.clone(),
+                            refund_amount,
+                            DisputeDecision::PaySeller as u32
+                        )
+                            .into_val(&env),
+                    )),
+                    sub_invocations: std::vec![AuthorizedInvocation {
+                        function: AuthorizedFunction::Contract((
+                            token_contract.address().clone(),
+                            symbol_short!("transfer"),
+                            (arbitrator.clone(), seller.clone(), refund_amount).into_val(&env),
+                        )),
+                        sub_invocations: std::vec![],
+                    }]
+                }
+            )
+        ]
+    );
+
     // Check the balance after the transfer
     let arbitrator_balance_after = token_client.balance(&arbitrator);
     assert_eq!(arbitrator_balance_after, 0);
 
-    // Check the buyer's balance
-    let buyer_balance_after = token_client.balance(&buyer);
-    assert_eq!(buyer_balance_after, 0);
+     // Check the buyer's balance
+     let buyer_balance_after = token_client.balance(&buyer);
+     assert_eq!(buyer_balance_after, 0); 
 
     // Check the seller's balance
     let seller_balance_after = token_client.balance(&seller);
