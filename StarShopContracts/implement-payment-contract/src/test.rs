@@ -465,7 +465,7 @@ fn test_resolve_dispute_refund_buyer() {
     let buyer = <Address>::generate(&env);
     let seller = <Address>::generate(&env);
     let arbitrator = <Address>::generate(&env);
-    let refund_amount = 100i128;
+    let refund_amount = 1000i128;
 
     // Mock the token client for transferring tokens
     let token_contract = env.register_stellar_asset_contract_v2(admin.clone());
@@ -552,7 +552,7 @@ fn test_resolve_dispute_pay_seller() {
     let buyer = <Address>::generate(&env);
     let seller = <Address>::generate(&env);
     let arbitrator = <Address>::generate(&env);
-    let refund_amount = 100i128;
+    let refund_amount = 1000i128;
 
     // Mock the token client for transferring tokens
     let token_contract = env.register_stellar_asset_contract_v2(admin.clone());
