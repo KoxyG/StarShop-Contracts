@@ -1,9 +1,9 @@
-use crate::helpers::{ensure_contract_active, ensure_user_verified, get_user_data, verify_admin};
+use crate::admin::AdminModule;
 use crate::level::LevelManagementModule;
+use crate::referral::ReferralModule;
 use crate::types::{DataKey, Error, Milestone, MilestoneRequirement, RewardRates};
 use soroban_sdk::token::Client as TokenClient;
 use soroban_sdk::{Address, Env, Vec};
-
 pub struct RewardModule;
 pub trait RewardOperations {
     /// Distribute rewards for a referral
@@ -27,12 +27,12 @@ pub trait RewardOperations {
 
 impl RewardOperations for RewardModule {
     fn distribute_rewards(env: Env, user: Address, amount: i128) -> Result<(), Error> {
-        ensure_contract_active(&env)?;
-        verify_admin(&env)?;
+        AdminModule::ensure_contract_active(&env)?;
+        AdminModule::verify_admin(&env)?;
 
         // Get user data and verify
-        let user_data = get_user_data(&env, &user)?;
-        ensure_user_verified(&user_data)?;
+        let user_data = ReferralModule::get_user_data(&env, &user)?;
+        ReferralModule::ensure_user_verified(&user_data)?;
 
         // Verify amount is positive
         if amount <= 0 {
@@ -54,7 +54,7 @@ impl RewardOperations for RewardModule {
         }
 
         // First reward the user themselves
-        let mut user_data = get_user_data(&env, &user)?;
+        let mut user_data = ReferralModule::get_user_data(&env, &user)?;
         user_data.pending_rewards += amount;
         user_data.total_rewards += amount;
         total_distributed += amount;
@@ -73,7 +73,7 @@ impl RewardOperations for RewardModule {
                 break;
             }
 
-            let mut upline_data = get_user_data(&env, &upline_address)?;
+            let mut upline_data = ReferralModule::get_user_data(&env, &upline_address)?;
 
             // Calculate reward based on level
             let reward_rate = match remaining_levels {
@@ -107,11 +107,11 @@ impl RewardOperations for RewardModule {
     }
 
     fn claim_rewards(env: Env, user: Address) -> Result<i128, Error> {
-        ensure_contract_active(&env)?;
+        AdminModule::ensure_contract_active(&env)?;
         user.require_auth();
 
-        let mut user_data = get_user_data(&env, &user)?;
-        ensure_user_verified(&user_data)?;
+        let mut user_data = ReferralModule::get_user_data(&env, &user)?;
+        ReferralModule::ensure_user_verified(&user_data)?;
 
         if user_data.pending_rewards <= 0 {
             return Err(Error::InsufficientRewards);
@@ -139,20 +139,20 @@ impl RewardOperations for RewardModule {
     }
 
     fn get_pending_rewards(env: Env, user: Address) -> Result<i128, Error> {
-        let user_data = get_user_data(&env, &user)?;
+        let user_data = ReferralModule::get_user_data(&env, &user)?;
         Ok(user_data.pending_rewards)
     }
 
     fn get_total_rewards(env: Env, user: Address) -> Result<i128, Error> {
-        let user_data = get_user_data(&env, &user)?;
+        let user_data = ReferralModule::get_user_data(&env, &user)?;
         Ok(user_data.total_rewards)
     }
 
     fn check_and_reward_milestone(env: Env, user: Address) -> Result<(), Error> {
         user.require_auth();
 
-        let user_data = get_user_data(&env, &user)?;
-        ensure_user_verified(&user_data)?;
+        let user_data = ReferralModule::get_user_data(&env, &user)?;
+        ReferralModule::ensure_user_verified(&user_data)?;
 
         let mut milestone_id = 0;
         while env

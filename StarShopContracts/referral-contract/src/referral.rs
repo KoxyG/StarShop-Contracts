@@ -1,4 +1,4 @@
-use crate::helpers::{ensure_contract_active, ensure_user_verified, get_user_data, user_exists};
+use crate::admin::AdminModule;
 use crate::level::LevelManagementModule;
 use crate::rewards::RewardModule;
 use crate::rewards::RewardOperations;
@@ -83,22 +83,22 @@ impl ReferralOperations for ReferralModule {
         referrer_address: Address,
         identity_proof: String,
     ) -> Result<(), Error> {
-        ensure_contract_active(&env)?;
+        AdminModule::ensure_contract_active(&env)?;
         user.require_auth();
 
         // Check if user already exists
-        if user_exists(&env, &user) {
+        if ReferralModule::user_exists(&env, &user) {
             return Err(Error::AlreadyRegistered);
         }
 
         // Check if referrer exists
-        if !user_exists(&env, &referrer_address) {
+        if !ReferralModule::user_exists(&env, &referrer_address) {
             return Err(Error::ReferrerNotFound);
         }
 
         // Check if referrer is verified
-        let referrer_data = get_user_data(&env, &referrer_address)?;
-        ensure_user_verified(&referrer_data)?;
+        let referrer_data = ReferralModule::get_user_data(&env, &referrer_address)?;
+        ReferralModule::ensure_user_verified(&referrer_data)?;
 
         // Create new user data
         let user_data = UserData {
@@ -132,30 +132,30 @@ impl ReferralOperations for ReferralModule {
     }
 
     fn is_user_verified(env: Env, user: Address) -> Result<bool, Error> {
-        get_user_data(&env, &user)
+        ReferralModule::get_user_data(&env, &user)
             .map(|data| data.verification_status == VerificationStatus::Verified)
     }
 
     fn is_user_registered(env: Env, user: Address) -> Result<bool, Error> {
-        Ok(user_exists(&env, &user))
+        Ok(ReferralModule::user_exists(&env, &user))
     }
 
     fn get_user_info(env: Env, user: Address) -> Result<UserData, Error> {
-        get_user_data(&env, &user)
+        ReferralModule::get_user_data(&env, &user)
     }
 
     fn get_direct_referrals(env: Env, user: Address) -> Result<Vec<Address>, Error> {
-        let user_data = get_user_data(&env, &user)?;
+        let user_data = ReferralModule::get_user_data(&env, &user)?;
         Ok(user_data.direct_referrals)
     }
 
     fn get_team_size(env: Env, user: Address) -> Result<u32, Error> {
-        let user_data = get_user_data(&env, &user)?;
+        let user_data = ReferralModule::get_user_data(&env, &user)?;
         Ok(user_data.team_size)
     }
 
     fn get_user_level(env: Env, user: Address) -> Result<UserLevel, Error> {
-        let user_data = get_user_data(&env, &user)?;
+        let user_data = ReferralModule::get_user_data(&env, &user)?;
         Ok(user_data.level)
     }
 
@@ -195,7 +195,7 @@ impl ReferralOperations for ReferralModule {
     }
 
     fn get_referral_conversion_rate(env: Env, user: Address) -> Result<u32, Error> {
-        let user_data = get_user_data(&env, &user)?;
+        let user_data = ReferralModule::get_user_data(&env, &user)?;
 
         if user_data.direct_referrals.len() == 0 {
             return Ok(0);
@@ -203,8 +203,8 @@ impl ReferralOperations for ReferralModule {
 
         let mut verified_referrals = 0;
         for referral in user_data.direct_referrals.iter() {
-            let referral_data = get_user_data(&env, &referral)?;
-            if crate::helpers::is_user_verified(&referral_data) {
+            let referral_data = ReferralModule::get_user_data(&env, &referral)?;
+            if ReferralModule::user_verified(&referral_data) {
                 verified_referrals += 1;
             }
         }
@@ -221,7 +221,7 @@ impl ReferralModule {
         referrer: &Address,
         new_user: &Address,
     ) -> Result<(), Error> {
-        let mut referrer_data = get_user_data(env, referrer)?;
+        let mut referrer_data = ReferralModule::get_user_data(env, referrer)?;
 
         // Add to direct referrals
         referrer_data.direct_referrals.push_back(new_user.clone());
@@ -252,7 +252,7 @@ impl ReferralModule {
             return Ok(());
         }
 
-        let mut user_data = get_user_data(env, user)?;
+        let mut user_data = ReferralModule::get_user_data(env, user)?;
         user_data.team_size += 1;
 
         env.storage()
@@ -276,5 +276,27 @@ impl ReferralModule {
         env.storage()
             .instance()
             .set(&DataKey::TotalUsers, &(current + 1));
+    }
+
+    pub fn get_user_data(env: &Env, user: &Address) -> Result<UserData, Error> {
+        env.storage()
+            .persistent()
+            .get(&DataKey::User(user.clone()))
+            .ok_or(Error::UserNotFound)
+    }
+
+    pub fn user_exists(env: &Env, user: &Address) -> bool {
+        env.storage().persistent().has(&DataKey::User(user.clone()))
+    }
+
+    pub fn ensure_user_verified(user_data: &UserData) -> Result<(), Error> {
+        if !ReferralModule::user_verified(user_data) {
+            return Err(Error::VerificationRequired);
+        }
+        Ok(())
+    }
+
+    pub fn user_verified(user_data: &UserData) -> bool {
+        matches!(user_data.verification_status, VerificationStatus::Verified)
     }
 }

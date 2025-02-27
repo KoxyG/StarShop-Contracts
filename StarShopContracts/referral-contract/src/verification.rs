@@ -1,4 +1,5 @@
-use crate::helpers::{ensure_contract_active, get_user_data, verify_admin};
+use crate::admin::*;
+use crate::referral::ReferralModule;
 use crate::types::{DataKey, Error, UserData, VerificationStatus};
 use soroban_sdk::{Address, Env, String, Vec};
 
@@ -23,17 +24,17 @@ pub trait VerificationOperations {
 
 impl VerificationOperations for VerificationModule {
     fn submit_verification(env: Env, user: Address, identity_proof: String) -> Result<(), Error> {
-        ensure_contract_active(&env)?;
+        AdminModule::ensure_contract_active(&env)?;
         user.require_auth();
 
-        let mut user_data = get_user_data(&env, &user)?;
+        let mut user_data = ReferralModule::get_user_data(&env, &user)?;
         Self::process_verification(&env, &mut user_data, &identity_proof)
     }
 
     fn approve_verification(env: Env, user: Address) -> Result<(), Error> {
-        verify_admin(&env)?;
+        AdminModule::verify_admin(&env)?;
 
-        let mut user_data = get_user_data(&env, &user)?;
+        let mut user_data = ReferralModule::get_user_data(&env, &user)?;
         user_data.verification_status = VerificationStatus::Verified;
 
         env.storage()
@@ -45,9 +46,9 @@ impl VerificationOperations for VerificationModule {
     }
 
     fn reject_verification(env: Env, user: Address, reason: String) -> Result<(), Error> {
-        verify_admin(&env)?;
+        AdminModule::verify_admin(&env)?;
 
-        let mut user_data = get_user_data(&env, &user)?;
+        let mut user_data = ReferralModule::get_user_data(&env, &user)?;
         user_data.verification_status = VerificationStatus::Rejected(reason);
 
         env.storage()
@@ -59,12 +60,12 @@ impl VerificationOperations for VerificationModule {
     }
 
     fn get_verification_status(env: Env, user: Address) -> Result<VerificationStatus, Error> {
-        let user_data = get_user_data(&env, &user)?;
+        let user_data = ReferralModule::get_user_data(&env, &user)?;
         Ok(user_data.verification_status)
     }
 
     fn get_pending_verifications(env: Env) -> Result<Vec<Address>, Error> {
-        verify_admin(&env)?; //do we need this for a get function??
+        AdminModule::verify_admin(&env)?;
 
         Ok(env
             .storage()

@@ -1,19 +1,18 @@
 #![no_std]
 use soroban_sdk::{contract, contractimpl, Address, Env, String, Vec};
 
-mod admin;
-mod helpers;
-mod level;
-mod referral;
-mod rewards;
-mod types;
-mod verification;
-
 use admin::*;
 use referral::*;
 use rewards::*;
 use types::*;
 use verification::*;
+
+mod admin;
+mod level;
+mod referral;
+mod rewards;
+mod types;
+mod verification;
 
 #[contract]
 pub struct ReferralContract;

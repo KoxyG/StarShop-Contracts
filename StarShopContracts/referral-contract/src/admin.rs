@@ -1,4 +1,3 @@
-use crate::helpers::verify_admin;
 use crate::types::{DataKey, Error, LevelRequirements, Milestone, RewardRates};
 use soroban_sdk::{Address, Env};
 
@@ -47,7 +46,6 @@ pub trait AdminOperations {
     fn transfer_admin(env: Env, new_admin: Address) -> Result<(), Error>;
 }
 
-
 impl AdminOperations for AdminModule {
     fn initialize(
         env: Env,
@@ -82,13 +80,13 @@ impl AdminOperations for AdminModule {
     }
 
     fn set_reward_rates(env: Env, rates: RewardRates) -> Result<(), Error> {
-        verify_admin(&env)?;
+        AdminModule::verify_admin(&env)?;
         env.storage().instance().set(&DataKey::RewardRates, &rates);
         Ok(())
     }
 
     fn add_milestone(env: Env, milestone: Milestone) -> Result<(), Error> {
-        verify_admin(&env)?;
+        AdminModule::verify_admin(&env)?;
 
         // Find next available milestone ID
         let mut next_id = 0;
@@ -105,7 +103,7 @@ impl AdminOperations for AdminModule {
     }
 
     fn remove_milestone(env: Env, milestone_id: u32) -> Result<(), Error> {
-        verify_admin(&env)?;
+        AdminModule::verify_admin(&env)?;
 
         if !env
             .storage()
@@ -126,7 +124,7 @@ impl AdminOperations for AdminModule {
         milestone_id: u32,
         new_milestone: Milestone,
     ) -> Result<(), Error> {
-        verify_admin(&env)?;
+        AdminModule::verify_admin(&env)?;
 
         if !env
             .storage()
@@ -144,7 +142,7 @@ impl AdminOperations for AdminModule {
     }
 
     fn pause_contract(env: Env) -> Result<(), Error> {
-        verify_admin(&env)?;
+        AdminModule::verify_admin(&env)?;
         env.storage()
             .instance()
             .set(&DataKey::ContractPaused, &true);
@@ -152,7 +150,7 @@ impl AdminOperations for AdminModule {
     }
 
     fn resume_contract(env: Env) -> Result<(), Error> {
-        verify_admin(&env)?;
+        AdminModule::verify_admin(&env)?;
         env.storage()
             .instance()
             .set(&DataKey::ContractPaused, &false);
@@ -164,13 +162,13 @@ impl AdminOperations for AdminModule {
     }
 
     fn transfer_admin(env: Env, new_admin: Address) -> Result<(), Error> {
-        verify_admin(&env)?;
+        AdminModule::verify_admin(&env)?;
         env.storage().instance().set(&DataKey::Admin, &new_admin);
         Ok(())
     }
 
     fn set_level_requirements(env: Env, requirements: LevelRequirements) -> Result<(), Error> {
-        verify_admin(&env)?;
+        AdminModule::verify_admin(&env)?;
 
         // Validate that higher levels have stricter requirements
         if !Self::validate_level_requirements(&requirements) {
@@ -184,7 +182,7 @@ impl AdminOperations for AdminModule {
     }
 
     fn set_reward_token(env: Env, token: Address) -> Result<(), Error> {
-        verify_admin(&env)?;
+        AdminModule::verify_admin(&env)?;
         env.storage().instance().set(&DataKey::RewardToken, &token);
         Ok(())
     }
@@ -201,6 +199,23 @@ impl AdminModule {
             .instance()
             .get(&DataKey::ContractPaused)
             .unwrap_or(false)
+    }
+
+    pub fn verify_admin(env: &Env) -> Result<(), Error> {
+        let admin: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Admin)
+            .ok_or(Error::NotInitialized)?;
+        admin.require_auth();
+        Ok(())
+    }
+
+    pub fn ensure_contract_active(env: &Env) -> Result<(), Error> {
+        if AdminModule::is_contract_paused(env) {
+            return Err(Error::ContractPaused);
+        }
+        Ok(())
     }
 
     fn validate_level_requirements(requirements: &LevelRequirements) -> bool {
