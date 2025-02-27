@@ -1,9 +1,52 @@
 use crate::helpers::verify_admin;
-use crate::interface::AdminOperations;
 use crate::types::{DataKey, Error, LevelRequirements, Milestone, RewardRates};
 use soroban_sdk::{Address, Env};
 
 pub struct AdminModule;
+
+pub trait AdminOperations {
+    /// Initialize contract with admin address
+    fn initialize(
+        env: Env,
+        admin: Address,
+        reward_token: Address,
+        level_requirements: LevelRequirements,
+    ) -> Result<(), Error>;
+
+    /// get admin address
+    fn get_admin(env: Env) -> Result<Address, Error>;
+
+    /// Set reward rates for different levels
+    fn set_reward_rates(env: Env, rates: RewardRates) -> Result<(), Error>;
+
+    /// Set level requirements for different levels
+    fn set_level_requirements(env: Env, requirements: LevelRequirements) -> Result<(), Error>;
+
+    /// Set reward token
+    fn set_reward_token(env: Env, token: Address) -> Result<(), Error>;
+
+    /// Add new milestone
+    fn add_milestone(env: Env, milestone: Milestone) -> Result<(), Error>;
+
+    /// Remove existing milestone
+    fn remove_milestone(env: Env, milestone_id: u32) -> Result<(), Error>;
+
+    /// Update existing milestone
+    fn update_milestone(env: Env, milestone_id: u32, milestone: Milestone) -> Result<(), Error>;
+
+    /// Pause contract operations (emergency)
+    fn pause_contract(env: Env) -> Result<(), Error>;
+
+    /// Resume contract operations
+    fn resume_contract(env: Env) -> Result<(), Error>;
+
+    /// Check if contract is paused
+    fn get_paused_state(env: Env) -> Result<bool, Error>;
+
+    /// Transfer admin rights to new address
+    fn transfer_admin(env: Env, new_admin: Address) -> Result<(), Error>;
+}
+
 
 impl AdminOperations for AdminModule {
     fn initialize(

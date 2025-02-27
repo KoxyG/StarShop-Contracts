@@ -1,12 +1,52 @@
 use crate::helpers::{ensure_contract_active, ensure_user_verified, get_user_data, user_exists};
-use crate::interface::ReferralOperations;
 use crate::level::LevelManagementModule;
-use crate::metrics::MetricsModule;
+use crate::rewards::RewardModule;
+use crate::rewards::RewardOperations;
 use crate::types::{DataKey, Error, UserData, UserLevel, VerificationStatus};
 use crate::verification::VerificationModule;
 use soroban_sdk::{Address, Env, String, Vec};
 
 pub struct ReferralModule;
+
+pub trait ReferralOperations {
+    /// Initialize contract
+    fn initialize(env: &Env, admin: &Address) -> Result<(), Error>;
+
+    /// Register new user with referral
+    fn register_with_referral(
+        env: Env,
+        user: Address,
+        referrer_address: Address,
+        identity_proof: String,
+    ) -> Result<(), Error>;
+
+    /// Check if user is verified
+    fn is_user_verified(env: Env, user: Address) -> Result<bool, Error>;
+
+    /// Check if user is registered
+    fn is_user_registered(env: Env, user: Address) -> Result<bool, Error>;
+
+    /// Get user's information
+    fn get_user_info(env: Env, user: Address) -> Result<UserData, Error>;
+
+    /// Get user's direct referrals
+    fn get_direct_referrals(env: Env, user: Address) -> Result<Vec<Address>, Error>;
+
+    /// Get user's team size (all levels)
+    fn get_team_size(env: Env, user: Address) -> Result<u32, Error>;
+
+    /// Get user's level
+    fn get_user_level(env: Env, user: Address) -> Result<UserLevel, Error>;
+
+    /// Get total registered users
+    fn get_total_users(env: Env) -> Result<u32, Error>;
+
+    /// Get system statistics
+    fn get_system_metrics(env: Env) -> Result<Vec<(String, i128)>, Error>;
+
+    /// Get user conversion rates
+    fn get_referral_conversion_rate(env: Env, user: Address) -> Result<u32, Error>;
+}
 
 impl ReferralOperations for ReferralModule {
     fn initialize(env: &Env, admin: &Address) -> Result<(), Error> {
@@ -32,7 +72,7 @@ impl ReferralOperations for ReferralModule {
             .set(&DataKey::User(admin.clone()), &user_data);
 
         // Increment total users
-        MetricsModule::increment_total_users(&env);
+        ReferralModule::increment_total_users(&env);
 
         Ok(())
     }
@@ -86,7 +126,7 @@ impl ReferralOperations for ReferralModule {
         VerificationModule::add_to_pending_verifications(&env, &user);
 
         // Increment total users
-        MetricsModule::increment_total_users(&env);
+        ReferralModule::increment_total_users(&env);
 
         Ok(())
     }
@@ -117,6 +157,60 @@ impl ReferralOperations for ReferralModule {
     fn get_user_level(env: Env, user: Address) -> Result<UserLevel, Error> {
         let user_data = get_user_data(&env, &user)?;
         Ok(user_data.level)
+    }
+
+    fn get_total_users(env: Env) -> Result<u32, Error> {
+        Ok(env
+            .storage()
+            .instance()
+            .get::<_, u32>(&DataKey::TotalUsers)
+            .unwrap_or_default())
+    }
+    fn get_system_metrics(env: Env) -> Result<Vec<(String, i128)>, Error> {
+        let mut metrics = Vec::new(&env);
+
+        // Total users
+        let total_users = Self::get_total_users(env.clone())? as i128;
+        metrics.push_back((String::from_str(&env, "total_users"), total_users));
+
+        // Total rewards
+        let total_rewards = RewardModule::get_total_distributed_rewards(env.clone())?;
+        metrics.push_back((
+            String::from_str(&env, "total_distributed_rewards"),
+            total_rewards,
+        ));
+
+        // Average reward per user
+        let avg_reward = if total_users > 0 {
+            total_rewards / total_users
+        } else {
+            0
+        };
+        metrics.push_back((
+            String::from_str(&env, "average_reward_per_user"),
+            avg_reward,
+        ));
+
+        Ok(metrics)
+    }
+
+    fn get_referral_conversion_rate(env: Env, user: Address) -> Result<u32, Error> {
+        let user_data = get_user_data(&env, &user)?;
+
+        if user_data.direct_referrals.len() == 0 {
+            return Ok(0);
+        }
+
+        let mut verified_referrals = 0;
+        for referral in user_data.direct_referrals.iter() {
+            let referral_data = get_user_data(&env, &referral)?;
+            if crate::helpers::is_user_verified(&referral_data) {
+                verified_referrals += 1;
+            }
+        }
+
+        // Calculate conversion rate as percentage (0-100)
+        Ok((verified_referrals * 100) / user_data.direct_referrals.len() as u32)
     }
 }
 
@@ -170,5 +264,17 @@ impl ReferralModule {
         }
 
         Ok(())
+    }
+
+    pub fn increment_total_users(env: &Env) {
+        let current = env
+            .storage()
+            .instance()
+            .get::<_, u32>(&DataKey::TotalUsers)
+            .unwrap_or_default();
+
+        env.storage()
+            .instance()
+            .set(&DataKey::TotalUsers, &(current + 1));
     }
 }

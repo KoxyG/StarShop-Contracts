@@ -1,12 +1,29 @@
 use crate::helpers::{ensure_contract_active, ensure_user_verified, get_user_data, verify_admin};
-use crate::interface::RewardOperations;
 use crate::level::LevelManagementModule;
-use crate::metrics::MetricsModule;
 use crate::types::{DataKey, Error, Milestone, MilestoneRequirement, RewardRates};
 use soroban_sdk::token::Client as TokenClient;
 use soroban_sdk::{Address, Env, Vec};
 
 pub struct RewardModule;
+pub trait RewardOperations {
+    /// Distribute rewards for a referral
+    fn distribute_rewards(env: Env, user: Address, amount: i128) -> Result<(), Error>;
+
+    /// Claim accumulated rewards
+    fn claim_rewards(env: Env, user: Address) -> Result<i128, Error>;
+
+    /// Get pending rewards balance
+    fn get_pending_rewards(env: Env, user: Address) -> Result<i128, Error>;
+
+    /// Get total rewards earned
+    fn get_total_rewards(env: Env, user: Address) -> Result<i128, Error>;
+
+    /// Check if milestone achieved and distribute rewards
+    fn check_and_reward_milestone(env: Env, user: Address) -> Result<(), Error>;
+
+    /// Get total distributed rewards
+    fn get_total_distributed_rewards(env: Env) -> Result<i128, Error>;
+}
 
 impl RewardOperations for RewardModule {
     fn distribute_rewards(env: Env, user: Address, amount: i128) -> Result<(), Error> {
@@ -84,7 +101,7 @@ impl RewardOperations for RewardModule {
         }
 
         // Update total distributed rewards
-        MetricsModule::add_distributed_rewards(&env, total_distributed);
+        RewardModule::add_distributed_rewards(&env, total_distributed);
 
         Ok(())
     }
@@ -181,7 +198,7 @@ impl RewardOperations for RewardModule {
                     .set(&DataKey::User(user.clone()), &updated_user);
 
                 // Update total distributed rewards
-                MetricsModule::add_distributed_rewards(&env, milestone.reward_amount);
+                RewardModule::add_distributed_rewards(&env, milestone.reward_amount);
 
                 // Mark milestone as achieved for this user
                 let mut updated_achieved = env
@@ -205,6 +222,14 @@ impl RewardOperations for RewardModule {
 
         Ok(())
     }
+
+    fn get_total_distributed_rewards(env: Env) -> Result<i128, Error> {
+        Ok(env
+            .storage()
+            .instance()
+            .get::<_, i128>(&DataKey::TotalDistributedRewards)
+            .unwrap_or(0))
+    }
 }
 
 // Helper functions
@@ -214,5 +239,17 @@ impl RewardModule {
             .persistent()
             .get::<_, Vec<u32>>(&DataKey::UserAchievedMilestones(user.clone()))
             .map_or(false, |achieved| achieved.contains(&milestone_id))
+    }
+
+    pub fn add_distributed_rewards(env: &Env, amount: i128) {
+        let current = env
+            .storage()
+            .instance()
+            .get::<_, i128>(&DataKey::TotalDistributedRewards)
+            .unwrap_or_default();
+
+        env.storage()
+            .instance()
+            .set(&DataKey::TotalDistributedRewards, &(current + amount));
     }
 }

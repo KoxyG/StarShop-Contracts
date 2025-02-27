@@ -1,9 +1,25 @@
 use crate::helpers::{ensure_contract_active, get_user_data, verify_admin};
-use crate::interface::VerificationOperations;
 use crate::types::{DataKey, Error, UserData, VerificationStatus};
 use soroban_sdk::{Address, Env, String, Vec};
 
 pub struct VerificationModule;
+
+pub trait VerificationOperations {
+    /// Submit verification documents for review
+    fn submit_verification(env: Env, user: Address, identity_proof: String) -> Result<(), Error>;
+
+    /// Admin approval of user verification
+    fn approve_verification(env: Env, user: Address) -> Result<(), Error>;
+
+    /// Admin rejection of user verification with reason
+    fn reject_verification(env: Env, user: Address, reason: String) -> Result<(), Error>;
+
+    /// Get user's verification status
+    fn get_verification_status(env: Env, user: Address) -> Result<VerificationStatus, Error>;
+
+    /// Get list of pending verifications
+    fn get_pending_verifications(env: Env) -> Result<Vec<Address>, Error>;
+}
 
 impl VerificationOperations for VerificationModule {
     fn submit_verification(env: Env, user: Address, identity_proof: String) -> Result<(), Error> {

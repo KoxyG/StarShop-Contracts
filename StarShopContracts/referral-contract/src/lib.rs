@@ -3,27 +3,17 @@ use soroban_sdk::{contract, contractimpl, Address, Env, String, Vec};
 
 mod admin;
 mod helpers;
-mod interface;
 mod level;
-mod metrics;
 mod referral;
 mod rewards;
 mod types;
 mod verification;
 
-use admin::AdminModule;
-use interface::{
-    AdminOperations, MetricsOperations, ReferralOperations, RewardOperations,
-    VerificationOperations,
-};
-use metrics::MetricsModule;
-use referral::ReferralModule;
-use rewards::RewardModule;
-use types::{
-    Error, LevelCriteria, LevelRequirements, Milestone, RewardRates, UserData, UserLevel,
-    VerificationStatus,
-};
-use verification::VerificationModule;
+use admin::*;
+use referral::*;
+use rewards::*;
+use types::*;
+use verification::*;
 
 #[contract]
 pub struct ReferralContract;
@@ -279,19 +269,19 @@ impl ReferralContract {
 
     /// Gets the total number of users in the system
     pub fn get_total_users(env: Env) -> Result<u32, Error> {
-        MetricsModule::get_total_users(env)
+        ReferralModule::get_total_users(env)
     }
 
     /// Gets the total amount of rewards distributed
     pub fn get_total_distributed_rewards(env: Env) -> Result<i128, Error> {
-        MetricsModule::get_total_distributed_rewards(env)
+        RewardModule::get_total_distributed_rewards(env)
     }
 
     /// Gets various system metrics as key-value pairs
     /// total_users, total_rewards, average_reward_per_user
     ///
     pub fn get_system_metrics(env: Env) -> Result<Vec<(String, i128)>, Error> {
-        MetricsModule::get_system_metrics(env)
+        ReferralModule::get_system_metrics(env)
     }
 
     /// Gets the referral conversion rate for a user. verified users/registered users
@@ -299,7 +289,7 @@ impl ReferralContract {
     /// # Arguments
     /// * `user` - The address of the user
     pub fn get_referral_conversion_rate(env: Env, user: Address) -> Result<u32, Error> {
-        MetricsModule::get_referral_conversion_rate(env, user)
+        ReferralModule::get_referral_conversion_rate(env, user)
     }
 
     /// Gets the level of a user
