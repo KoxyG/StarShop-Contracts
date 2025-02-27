@@ -6,6 +6,7 @@ members = [
     "StarShopContracts/implement-payment-contract",
     "StarShopContracts/product-follow-contract",
     "StarShopContracts/product-voting-contract",
+    "StarShopContracts/referral-contract",
 ]
 
 [workspace.dependencies]
