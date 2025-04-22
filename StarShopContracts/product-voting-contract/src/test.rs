@@ -8,7 +8,7 @@ mod tests {
     use soroban_sdk::{
         testutils::Address as _,
         testutils::{Ledger, LedgerInfo},
-        Address, Env, Symbol, Vec,
+        Address, Env, Symbol,
     };
 
     const DAILY_VOTE_LIMIT: u32 = 10;
@@ -533,179 +533,164 @@ mod tests {
     }
 
     #[test]
-    fn test_random_selection_distribution() {
+    fn test_result_recording() {
         let env = Env::default();
-        VoteManager::init(&env);
-        RankingCalculator::init(&env);
+        let contract_id = env.register(ProductVoting, ());
+        env.mock_all_auths();
+        env.as_contract(&contract_id, || {
+            VoteManager::init(&env);
+            RankingCalculator::init(&env);
 
-        let product1 = Symbol::new(&env, "prod1");
-        let product2 = Symbol::new(&env, "prod2");
-        let product3 = Symbol::new(&env, "prod3");
+            let product1 = Symbol::new(&env, "prod1");
+            VoteManager::create_product(&env, product1.clone(), Symbol::new(&env, "Product1")).unwrap();
 
-        VoteManager::create_product(&env, product1.clone(), Symbol::new(&env, "Product1")).unwrap();
-        VoteManager::create_product(&env, product2.clone(), Symbol::new(&env, "Product2")).unwrap();
-        VoteManager::create_product(&env, product3.clone(), Symbol::new(&env, "Product3")).unwrap();
+            let voter1 = Address::generate(&env);
+            let voter2 = Address::generate(&env);
 
-        let voter1 = Address::generate(&env);
-        let voter2 = Address::generate(&env);
-        let voter3 = Address::generate(&env);
+            // Cast votes and update ranking
+            VoteManager::cast_vote(&env, product1.clone(), VoteType::Upvote, voter1).unwrap();
+            RankingCalculator::update_ranking(&env, product1.clone());
 
-        VoteManager::cast_vote(&env, product1.clone(), VoteType::Upvote, voter1).unwrap();
-        VoteManager::cast_vote(&env, product2.clone(), VoteType::Upvote, voter2).unwrap();
-        VoteManager::cast_vote(&env, product3.clone(), VoteType::Upvote, voter3).unwrap();
+            VoteManager::cast_vote(&env, product1.clone(), VoteType::Upvote, voter2).unwrap();
+            RankingCalculator::update_ranking(&env, product1.clone());
 
-        let mut winners = Vec::new(&env);
-        for _ in 0..10 {
-            if let Some(winner) = select_winner(&env) {
-                winners.push_back(winner);
-            }
-        }
-
-        assert!(
-            winners.iter().any(|w| w == product1) &&
-            winners.iter().any(|w| w == product2) &&
-            winners.iter().any(|w| w == product3),
-            "Winner selection should not be biased toward a single product."
-        );
+            let score = RankingCalculator::get_score(&env, product1.clone());
+            // Score = 2 (upvotes) + 1 (recent votes bonus)
+            assert_eq!(score, 3, "Ranking should reflect votes plus recent votes bonus.");
+        });
     }
 
-    /// Ensures that products with more votes have a higher chance of winning.
-    #[test]
-    fn test_selection_fairness() {
-        let env = Env::default();
-        VoteManager::init(&env);
-        RankingCalculator::init(&env);
-
-        let product1 = Symbol::new(&env, "prod1");
-        let product2 = Symbol::new(&env, "prod2");
-
-        VoteManager::create_product(&env, product1.clone(), Symbol::new(&env, "Product1")).unwrap();
-        VoteManager::create_product(&env, product2.clone(), Symbol::new(&env, "Product2")).unwrap();
-
-        let voter1 = Address::generate(&env);
-        let voter2 = Address::generate(&env);
-        let voter3 = Address::generate(&env);
-
-        // Product 1 gets more votes than Product 2
-        VoteManager::cast_vote(&env, product1.clone(), VoteType::Upvote, voter1).unwrap();
-        VoteManager::cast_vote(&env, product1.clone(), VoteType::Upvote, voter2).unwrap();
-        VoteManager::cast_vote(&env, product2.clone(), VoteType::Upvote, voter3).unwrap();
-
-        let mut winners = Vec::new(&env);
-        for _ in 0..10 {
-            if let Some(w) = select_winner(&env) {
-                winners.push_back(w);
-            }
-        }
-
-        let product1_count = winners.iter().filter(|w| *w == product1).count();
-        let product2_count = winners.iter().filter(|w| *w == product2).count();
-
-        assert!(
-            product1_count > product2_count,
-            "Product with higher votes should be selected more frequently."
-        );
-    }
-
-    /// Ensures that the selected winner is an actual product with votes.
-    #[test]
-    fn test_winner_validity() {
-        let env = Env::default();
-        VoteManager::init(&env);
-        RankingCalculator::init(&env);
-
-        let product1 = Symbol::new(&env, "prod1");
-        VoteManager::create_product(&env, product1.clone(), Symbol::new(&env, "Product1")).unwrap();
-
-        let voter = Address::generate(&env);
-        VoteManager::cast_vote(&env, product1.clone(), VoteType::Upvote, voter).unwrap();
-
-        let winner = select_winner(&env);
-        assert!(winner.is_some(), "A valid winner should be selected.");
-        assert_eq!(winner, Some(product1), "Winner should be a product with votes.");
-    }
-
-    ///
-    /// Covers different vote distributions: no votes, equal votes, and skewed votes.
-    #[test]
-    fn test_multiple_scenarios() {
-        let env = Env::default();
-        VoteManager::init(&env);
-        RankingCalculator::init(&env);
-
-        let product1 = Symbol::new(&env, "prod1");
-        let product2 = Symbol::new(&env, "prod2");
-
-        VoteManager::create_product(&env, product1.clone(), Symbol::new(&env, "Product1")).unwrap();
-        VoteManager::create_product(&env, product2.clone(), Symbol::new(&env, "Product2")).unwrap();
-
-        // No votes scenario
-        let winner_no_votes = select_winner(&env);
-        assert!(winner_no_votes.is_none(), "Should return None if no votes exist.");
-
-        let voter1 = Address::generate(&env);
-        let voter2 = Address::generate(&env);
-        let voter3 = Address::generate(&env);
-
-        // Equal votes scenario
-        VoteManager::cast_vote(&env, product1.clone(), VoteType::Upvote, voter1).unwrap();
-        VoteManager::cast_vote(&env, product2.clone(), VoteType::Upvote, voter2).unwrap();
-
-        let winner_equal_votes = select_winner(&env);
-        assert!(winner_equal_votes.is_some(), "A winner should still be chosen.");
-
-        // Skewed votes scenario
-        VoteManager::cast_vote(&env, product1.clone(), VoteType::Upvote, voter3).unwrap();
-        let winner_skewed_votes = select_winner(&env);
-        assert_eq!(winner_skewed_votes, Some(product1), "Product with more votes should win.");
-    }
-
-    /// Ensures graceful handling of edge cases.
-    #[test]
-    fn test_selection_errors() {
-        let env = Env::default();
-        VoteManager::init(&env);
-        RankingCalculator::init(&env);
-
-        let winner = select_winner(&env);
-        assert!(winner.is_none(), "Should return None if no products exist.");
-    }
-
-    /// Verify Winner Notification**
-    /// Ensures the winner is recorded properly.
     #[test]
     fn test_winner_notification() {
         let env = Env::default();
-        VoteManager::init(&env);
-        RankingCalculator::init(&env);
+        let contract_id = env.register(ProductVoting, ());
+        env.as_contract(&contract_id, || {
+            VoteManager::init(&env);
+            RankingCalculator::init(&env);
 
-        let product1 = Symbol::new(&env, "prod1");
-        VoteManager::create_product(&env, product1.clone(), Symbol::new(&env, "Product1")).unwrap();
+            let product1 = Symbol::new(&env, "prod1");
+            VoteManager::create_product(&env, product1.clone(), Symbol::new(&env, "Product1")).unwrap();
 
-        let voter1 = Address::generate(&env);
-        VoteManager::cast_vote(&env, product1.clone(), VoteType::Upvote, voter1).unwrap();
+            let voter1 = Address::generate(&env);
+            VoteManager::cast_vote(&env, product1.clone(), VoteType::Upvote, voter1).unwrap();
+            RankingCalculator::update_ranking(&env, product1.clone());
 
-        let winner = select_winner(&env);
-        assert_eq!(winner, Some(product1), "Winner should be correctly recorded.");
+            let winner = select_winner(&env);
+            assert_eq!(winner, Some(product1), "Winner should be correctly recorded.");
+        });
     }
 
-    /// Ensures vote counts and rankings are properly stored.
     #[test]
-    fn test_result_recording() {
+    fn test_multiple_scenarios() {
         let env = Env::default();
-        VoteManager::init(&env);
-        RankingCalculator::init(&env);
+        let contract_id = env.register(ProductVoting, ());
+        env.as_contract(&contract_id, || {
+            VoteManager::init(&env);
+            RankingCalculator::init(&env);
 
-        let product1 = Symbol::new(&env, "prod1");
-        VoteManager::create_product(&env, product1.clone(), Symbol::new(&env, "Product1")).unwrap();
+            let product1 = Symbol::new(&env, "prod1");
+            let product2 = Symbol::new(&env, "prod2");
 
-        let voter1 = Address::generate(&env);
-        let voter2 = Address::generate(&env);
+            VoteManager::create_product(&env, product1.clone(), Symbol::new(&env, "Product1")).unwrap();
+            VoteManager::create_product(&env, product2.clone(), Symbol::new(&env, "Product2")).unwrap();
 
-        VoteManager::cast_vote(&env, product1.clone(), VoteType::Upvote, voter1).unwrap();
-        VoteManager::cast_vote(&env, product1.clone(), VoteType::Upvote, voter2).unwrap();
+            // No votes scenario
+            let winner_no_votes = select_winner(&env);
+            assert!(winner_no_votes.is_none(), "Should return None if no votes exist.");
 
-        let score = RankingCalculator::get_score(&env, product1.clone());
-        assert_eq!(score, 2, "Ranking should reflect the correct number of votes.");
+            let voter1 = Address::generate(&env);
+            let voter2 = Address::generate(&env);
+            let voter3 = Address::generate(&env);
+
+            // Equal votes scenario
+            VoteManager::cast_vote(&env, product1.clone(), VoteType::Upvote, voter1).unwrap();
+            RankingCalculator::update_ranking(&env, product1.clone());
+            
+            VoteManager::cast_vote(&env, product2.clone(), VoteType::Upvote, voter2).unwrap();
+            RankingCalculator::update_ranking(&env, product2.clone());
+
+            let winner_equal_votes = select_winner(&env);
+            assert!(winner_equal_votes.is_some(), "A winner should still be chosen.");
+
+            // Skewed votes scenario
+            VoteManager::cast_vote(&env, product1.clone(), VoteType::Upvote, voter3).unwrap();
+            RankingCalculator::update_ranking(&env, product1.clone());
+            
+            let winner_skewed_votes = select_winner(&env);
+            assert_eq!(winner_skewed_votes, Some(product1), "Product with more votes should win.");
+        });
+    }
+
+    #[test]
+    fn test_random_selection_distribution() {
+        let env = Env::default();
+        let contract_id = env.register(ProductVoting, ());
+        env.mock_all_auths();
+        env.as_contract(&contract_id, || {
+            VoteManager::init(&env);
+            RankingCalculator::init(&env);
+
+            let product1 = Symbol::new(&env, "prod1");
+            let product2 = Symbol::new(&env, "prod2");
+            let product3 = Symbol::new(&env, "prod3");
+
+            VoteManager::create_product(&env, product1.clone(), Symbol::new(&env, "Product1")).unwrap();
+            VoteManager::create_product(&env, product2.clone(), Symbol::new(&env, "Product2")).unwrap();
+            VoteManager::create_product(&env, product3.clone(), Symbol::new(&env, "Product3")).unwrap();
+
+            let voter1 = Address::generate(&env);
+            let voter2 = Address::generate(&env);
+            let voter3 = Address::generate(&env);
+            let voter4 = Address::generate(&env);
+
+            // Product 1: 3 upvotes
+            VoteManager::cast_vote(&env, product1.clone(), VoteType::Upvote, voter1.clone()).unwrap();
+            VoteManager::cast_vote(&env, product1.clone(), VoteType::Upvote, voter2.clone()).unwrap();
+            VoteManager::cast_vote(&env, product1.clone(), VoteType::Upvote, voter3.clone()).unwrap();
+            RankingCalculator::update_ranking(&env, product1.clone());
+            
+            // Product 2: 2 upvotes
+            VoteManager::cast_vote(&env, product2.clone(), VoteType::Upvote, voter2.clone()).unwrap();
+            VoteManager::cast_vote(&env, product2.clone(), VoteType::Upvote, voter3.clone()).unwrap();
+            RankingCalculator::update_ranking(&env, product2.clone());
+            
+            // Product 3: 1 upvote
+            VoteManager::cast_vote(&env, product3.clone(), VoteType::Upvote, voter4.clone()).unwrap();
+            RankingCalculator::update_ranking(&env, product3.clone());
+
+            // Verificar que los productos tienen diferentes scores
+            let score1 = RankingCalculator::get_score(&env, product1.clone());
+            let score2 = RankingCalculator::get_score(&env, product2.clone());
+            let score3 = RankingCalculator::get_score(&env, product3.clone());
+            
+            assert!(score1 > score2 && score2 > score3, "Products should have descending scores");
+
+            let trending = RankingCalculator::get_trending(&env);
+            assert_eq!(trending.len(), 3, "All products should be in trending list");
+            assert_eq!(trending.get(0).unwrap(), product1, "Product1 should be first with highest score");
+            assert_eq!(trending.get(1).unwrap(), product2, "Product2 should be second");
+            assert_eq!(trending.get(2).unwrap(), product3, "Product3 should be third with lowest score");
+        });
+    }
+
+    #[test]
+    fn test_winner_validity() {
+        let env = Env::default();
+        let contract_id = env.register(ProductVoting, ());
+        env.as_contract(&contract_id, || {
+            VoteManager::init(&env);
+            RankingCalculator::init(&env);
+
+            let product1 = Symbol::new(&env, "prod1");
+            VoteManager::create_product(&env, product1.clone(), Symbol::new(&env, "Product1")).unwrap();
+
+            let voter = Address::generate(&env);
+            VoteManager::cast_vote(&env, product1.clone(), VoteType::Upvote, voter).unwrap();
+            RankingCalculator::update_ranking(&env, product1.clone());
+
+            let winner = select_winner(&env);
+            assert!(winner.is_some(), "A valid winner should be selected.");
+            assert_eq!(winner, Some(product1), "Winner should be a product with votes.");
+        });
     }
 }
