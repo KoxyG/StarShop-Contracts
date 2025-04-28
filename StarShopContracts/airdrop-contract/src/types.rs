@@ -2,6 +2,7 @@ use soroban_sdk::{Address, Bytes, Map, Symbol, contracterror, contracttype};
 
 /// Represents an airdrop event with dynamic eligibility conditions and constraints.
 #[contracttype]
+
 pub struct AirdropEvent {
     /// Human-readable name for the airdrop event (e.g., "Loyalty Rewards - July 2025").
     pub name: Symbol,

@@ -1,347 +1,532 @@
 #![cfg(test)]
 
-use crate::{AirdropContract, AirdropContractClient, DataKey, UserData};
+use super::{
+    AirdropContract, AirdropContractClient, interface::TrackingOperations, types::{AirdropError, DataKey, UserData},
+};
 use soroban_sdk::{
-    Address, Env, IntoVal, String, Vec,
-    testutils::{Address as _, Ledger as _, MockAuth, MockAuthInvoke},
+    symbol_short, testutils::{Address as _, Events as _}, Address, Env, Map, Symbol, Vec,
+    token::{StellarAssetClient as TokenAdmin, TokenClient},
 };
 
-// Mock token contract for testing token-based airdrops
-mod mock_token {
-    use soroban_sdk::{Address, Env, contract, contractimpl, token};
-
-    #[contract]
-    pub struct MockToken;
-
-    #[contractimpl]
-    impl MockToken {
-        pub fn transfer(env: Env, from: Address, to: Address, amount: i128) {
-            from.require_auth();
-            // Simulate transfer logic
-            env.events().publish(("transfer", from, to, amount));
-        }
-
-        pub fn balance(_env: Env, _addr: Address) -> i128 {
-            // Mock balance for testing
-            1000
-        }
-    }
-}
-
-fn create_test_env() -> (Env, Address, Address) {
+fn create_test_env() -> (Env, Address) {
     let env = Env::default();
     env.mock_all_auths();
-    let admin = Address::generate(&env);
-    let contract_id = env.register(AirdropContract, ());
-    (env, admin, contract_id)
+    let contract_id = env.register_contract(None, AirdropContract);
+    (env, contract_id)
+}
+
+fn setup_token(env: &Env) -> (Address, TokenAdmin) {
+    let token_admin = Address::generate(env);
+    let token = env.register_stellar_asset_contract_v2(token_admin.clone());
+    (token.address(), TokenAdmin::new(env, &token.address()))
+}
+
+fn create_airdrop_event(
+    client: &AirdropContractClient,
+    admin: &Address,
+    conditions: Map<Symbol, u64>,
+    amount: u64,
+    token_address: &Address,
+) -> u64 {
+    client.trigger_airdrop(&conditions, &amount, token_address);
+    let event_id: u64 = client.env().storage().persistent().get(&DataKey::EventId).unwrap();
+    event_id
+}
+
+fn set_user_metrics(
+    env: &Env,
+    contract_id: &Address,
+    admin: &Address,
+    user: &Address,
+    metrics: Map<Symbol, u64>,
+) {
+    env.as_contract(contract_id, || {
+        AirdropContract.update_user_data(env, admin, user, metrics).unwrap();
+    });
 }
 
 #[test]
 fn test_initialize_success() {
-    let (env, admin, contract_id) = create_test_env();
+    let (env, contract_id) = create_test_env();
     let client = AirdropContractClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
 
-    // Initialize
     client.initialize(&admin);
 
-    // Verify storage
-    let stored_admin: Address = env.storage().persistent().get(&DataKey::Admin).unwrap();
-    assert_eq!(stored_admin, admin);
-    let event_id: u64 = env.storage().persistent().get(&DataKey::EventId).unwrap();
-    assert_eq!(event_id, 0);
+    env.as_contract(&contract_id, || {
+        let stored_admin: Address = env.storage().persistent().get(&DataKey::Admin).unwrap();
+        let event_id: u64 = env.storage().persistent().get(&DataKey::EventId).unwrap();
+        assert_eq!(stored_admin, admin);
+        assert_eq!(event_id, 0);
+    });
 }
 
 #[test]
-#[should_panic(expected = "Already initialized")]
 fn test_initialize_already_initialized() {
-    let (env, admin, contract_id) = create_test_env();
+    let (env, contract_id) = create_test_env();
     let client = AirdropContractClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
 
-    // Initialize first time
     client.initialize(&admin);
 
-    // Attempt to initialize again
-    client.initialize(&admin);
+    let result = client.try_initialize(&admin);
+    assert_eq!(result, Err(Ok(AirdropError::AlreadyInitialized)));
 }
 
 #[test]
-fn test_record_purchase() {
-    let (env, admin, contract_id) = create_test_env();
+fn test_trigger_airdrop_success_xlm() {
+    let (env, contract_id) = create_test_env();
     let client = AirdropContractClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+    let (xlm_address, _) = setup_token(&env);
+
+    client.initialize(&admin);
+
+    let mut conditions = Map::new(&env);
+    conditions.set(symbol_short!("purchases"), 5);
+    conditions.set(symbol_short!("loyalty"), 3);
+    let amount = 1000;
+
+    client.trigger_airdrop(&conditions, &amount, &xlm_address);
+
+    env.as_contract(&contract_id, || {
+        let event_id: u64 = env.storage().persistent().get(&DataKey::EventId).unwrap();
+        assert_eq!(event_id, 1);
+        let event: super::types::AirdropEvent = env
+            .storage()
+            .persistent()
+            .get(&DataKey::AirdropEvent(1))
+            .unwrap();
+        assert_eq!(event.conditions, conditions);
+        assert_eq!(event.amount, amount);
+        assert_eq!(event.token_address, xlm_address);
+
+        let events = env.events().all();
+        assert_eq!(events.len(), 1);
+        let event = events.get_unchecked(0);
+        assert_eq!(event.topics, vec![&env, symbol_short!("airdrop_triggered"), 1u64.into()]);
+    });
+}
+
+#[test]
+fn test_trigger_airdrop_success_custom_token() {
+    let (env, contract_id) = create_test_env();
+    let client = AirdropContractClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+    let (token_address, _) = setup_token(&env);
+
+    client.initialize(&admin);
+
+    let mut conditions = Map::new(&env);
+    conditions.set(symbol_short!("activity"), 100);
+    let amount = 500;
+
+    client.trigger_airdrop(&conditions, &amount, &token_address);
+
+    env.as_contract(&contract_id, || {
+        let event_id: u64 = env.storage().persistent().get(&DataKey::EventId).unwrap();
+        assert_eq!(event_id, 1);
+        let event: super::types::AirdropEvent = env
+            .storage()
+            .persistent()
+            .get(&DataKey::AirdropEvent(1))
+            .unwrap();
+        assert_eq!(event.conditions, conditions);
+        assert_eq!(event.amount, amount);
+        assert_eq!(event.token_address, token_address);
+    });
+}
+
+#[test]
+fn test_trigger_airdrop_invalid_amount() {
+    let (env, contract_id) = create_test_env();
+    let client = AirdropContractClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+    let (token_address, _) = setup_token(&env);
+
+    client.initialize(&admin);
+
+    let conditions = Map::new(&env);
+
+    let result = client.try_trigger_airdrop(&conditions, &0, &token_address);
+    assert_eq!(result, Err(Ok(AirdropError::InvalidAmount)));
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, Unauthorized)")]
+fn test_trigger_airdrop_unauthorized() {
+    let (env, contract_id) = create_test_env();
+    let client = AirdropContractClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+    let non_admin = Address::generate(&env);
+    let (token_address, _) = setup_token(&env);
+
+    client.initialize(&admin);
+
+    env.as_contract(&contract_id, || {
+        env.mock_all_auths_with_caller(&non_admin);
+    });
+
+    client.trigger_airdrop(&Map::new(&env), &1000, &token_address);
+}
+
+#[test]
+fn test_claim_airdrop_success() {
+    let (env, contract_id) = create_test_env();
+    let client = AirdropContractClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
     let user = Address::generate(&env);
+    let (token_address, token_admin) = setup_token(&env);
+    let token_client = TokenClient::new(&env, &token_address);
 
-    // Initialize
     client.initialize(&admin);
 
-    // Record purchase
-    client.record_purchase(&user, &100);
+    let mut conditions = Map::new(&env);
+    conditions.set(symbol_short!("purchases"), 5);
+    let amount = 1000;
 
-    // Verify user data
-    let user_data: UserData = env
-        .storage()
-        .persistent()
-        .get(&DataKey::UserData(user))
-        .unwrap();
-    assert_eq!(user_data.total_purchases, 100);
-    assert_eq!(user_data.activity_points, 0);
-    assert_eq!(user_data.loyalty_level, 0);
+    let event_id = create_airdrop_event(&client, &admin, conditions.clone(), amount, &token_address);
+
+    let mut metrics = Map::new(&env);
+    metrics.set(symbol_short!("purchases"), 10);
+    set_user_metrics(&env, &contract_id, &admin, &user, metrics);
+
+    token_admin.mint(&contract_id, &10000);
+
+    client.claim_airdrop(&event_id);
+
+    assert_eq!(token_client.balance(&user), 1000);
+    assert_eq!(token_client.balance(&contract_id), 9000);
+
+    env.as_contract(&contract_id, || {
+        let claimed: bool = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Claimed(event_id, user.clone()))
+            .unwrap_or(false);
+        assert!(claimed);
+    });
+
+    let events = env.events().all();
+    assert_eq!(events.len(), 2);
+    let claimed_event = events.get_unchecked(1);
+    assert_eq!(
+        claimed_event.topics,
+        vec![&env, symbol_short!("claimed"), event_id.into(), user.into()]
+    );
+    assert_eq!(claimed_event.data, (token_address, amount));
 }
 
 #[test]
-fn test_record_activity() {
-    let (env, admin, contract_id) = create_test_env();
-    let client = AirdropContractClient::new(&env, &contract_id);
-    let user = Address::generate(&env);
-
-    // Initialize
-    client.initialize(&admin);
-
-    // Record activity
-    client.record_activity(&user, &50);
-
-    // Verify user data
-    let user_data: UserData = env
-        .storage()
-        .persistent()
-        .get(&DataKey::UserData(user))
-        .unwrap();
-    assert_eq!(user_data.total_purchases, 0);
-    assert_eq!(user_data.activity_points, 50);
-    assert_eq!(user_data.loyalty_level, 0);
-}
-
-#[test]
-fn test_set_loyalty_level() {
-    let (env, admin, contract_id) = create_test_env();
-    let client = AirdropContractClient::new(&env, &contract_id);
-    let user = Address::generate(&env);
-
-    // Initialize
-    client.initialize(&admin);
-
-    // Set loyalty level
-    client.set_loyalty_level(&user, &3);
-
-    // Verify user data
-    let user_data: UserData = env
-        .storage()
-        .persistent()
-        .get(&DataKey::UserData(user))
-        .unwrap();
-    assert_eq!(user_data.total_purchases, 0);
-    assert_eq!(user_data.activity_points, 0);
-    assert_eq!(user_data.loyalty_level, 3);
-}
-
-#[test]
-fn test_trigger_airdrop_xlm() {
-    let (env, admin, contract_id) = create_test_env();
-    let client = AirdropContractClient::new(&env, &contract_id);
-
-    // Initialize
-    client.initialize(&admin);
-
-    // Trigger XLM airdrop
-    client.trigger_airdrop(&10, &20, &1, &100, &true, &None);
-
-    // Verify airdrop event
-    let event_id: u64 = env.storage().persistent().get(&DataKey::EventId).unwrap();
-    assert_eq!(event_id, 1);
-    let airdrop_event: AirdropEvent = env
-        .storage()
-        .persistent()
-        .get(&DataKey::AirdropEvent(1))
-        .unwrap();
-    assert_eq!(airdrop_event.min_purchases, 10);
-    assert_eq!(airdrop_event.min_activity_points, 20);
-    assert_eq!(airdrop_event.min_loyalty_level, 1);
-    assert_eq!(airdrop_event.amount, 100);
-    assert!(airdrop_event.is_xlm);
-    assert!(airdrop_event.token_address.is_none());
-}
-
-#[test]
-fn test_trigger_airdrop_token() {
-    let (env, admin, contract_id) = create_test_env();
-    let client = AirdropContractClient::new(&env, &contract_id);
-    let token_address = Address::generate(&env);
-
-    // Initialize
-    client.initialize(&admin);
-
-    // Trigger token airdrop
-    client.trigger_airdrop(&10, &20, &1, &100, &false, &Some(token_address.clone()));
-
-    // Verify airdrop event
-    let event_id: u64 = env.storage().persistent().get(&DataKey::EventId).unwrap();
-    assert_eq!(event_id, 1);
-    let airdrop_event: AirdropEvent = env
-        .storage()
-        .persistent()
-        .get(&DataKey::AirdropEvent(1))
-        .unwrap();
-    assert_eq!(airdrop_event.min_purchases, 10);
-    assert_eq!(airdrop_event.min_activity_points, 20);
-    assert_eq!(airdrop_event.min_loyalty_level, 1);
-    assert_eq!(airdrop_event.amount, 100);
-    assert!(!airdrop_event.is_xlm);
-    assert_eq!(airdrop_event.token_address, Some(token_address));
-}
-
-#[test]
-#[should_panic(expected = "Invalid: token_address should be None for XLM")]
-fn test_trigger_airdrop_invalid_xlm() {
-    let (env, admin, contract_id) = create_test_env();
-    let client = AirdropContractClient::new(&env, &contract_id);
-    let token_address = Address::generate(&env);
-
-    // Initialize
-    client.initialize(&admin);
-
-    // Attempt to trigger XLM airdrop with token_address
-    client.trigger_airdrop(&10, &20, &1, &100, &true, &Some(token_address));
-}
-
-#[test]
-#[should_panic(expected = "Invalid: token_address required for token airdrop")]
-fn test_trigger_airdrop_invalid_token() {
-    let (env, admin, contract_id) = create_test_env();
-    let client = AirdropContractClient::new(&env, &contract_id);
-
-    // Initialize
-    client.initialize(&admin);
-
-    // Attempt to trigger token airdrop without token_address
-    client.trigger_airdrop(&10, &20, &1, &100, &false, &None);
-}
-
-#[test]
-fn test_claim_airdrop_eligible_xlm() {
-    let (env, admin, contract_id) = create_test_env();
-    let client = AirdropContractClient::new(&env, &contract_id);
-    let user = Address::generate(&env);
-
-    // Initialize
-    client.initialize(&admin);
-
-    // Set user data to meet eligibility
-    client.record_purchase(&user, &100);
-    client.record_activity(&user, &50);
-    client.set_loyalty_level(&user, &2);
-
-    // Trigger XLM airdrop
-    client.trigger_airdrop(&10, &20, &1, &100, &true, &None);
-
-    // Claim airdrop
-    client.claim_airdrop(&1);
-
-    // Verify claim status
-    let claimed_key = DataKey::Claimed(1, user.clone());
-    let claimed: bool = env.storage().persistent().get(&claimed_key).unwrap();
-    assert!(claimed);
-
-    // Verify XLM transfer (mocked)
-    // In a real test, check balance or events
-}
-
-#[test]
-fn test_claim_airdrop_eligible_token() {
-    let (env, admin, contract_id) = create_test_env();
-    let client = AirdropContractClient::new(&env, &contract_id);
-    let user = Address::generate(&env);
-    let token_address = env.register_contract_wasm(None, mock_token::MockToken);
-
-    // Initialize
-    client.initialize(&admin);
-
-    // Set user data to meet eligibility
-    client.record_purchase(&user, &100);
-    client.record_activity(&user, &50);
-    client.set_loyalty_level(&user, &2);
-
-    // Trigger token airdrop
-    client.trigger_airdrop(&10, &20, &1, &100, &false, &Some(token_address.clone()));
-
-    // Claim airdrop
-    client.claim_airdrop(&1);
-
-    // Verify claim status
-    let claimed_key = DataKey::Claimed(1, user.clone());
-    let claimed: bool = env.storage().persistent().get(&claimed_key).unwrap();
-    assert!(claimed);
-
-    // Verify token transfer (mocked)
-    // In a real test, check token balance or events
-}
-
-#[test]
-#[should_panic(expected = "User not eligible")]
 fn test_claim_airdrop_not_eligible() {
-    let (env, admin, contract_id) = create_test_env();
+    let (env, contract_id) = create_test_env();
     let client = AirdropContractClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
     let user = Address::generate(&env);
+    let (token_address, _) = setup_token(&env);
 
-    // Initialize
     client.initialize(&admin);
 
-    // Set user data to not meet eligibility
-    client.record_purchase(&user, &5); // Less than min_purchases
-    client.record_activity(&user, &10); // Less than min_activity_points
-    client.set_loyalty_level(&user, &0); // Less than min_loyalty_level
+    let mut conditions = Map::new(&env);
+    conditions.set(symbol_short!("purchases"), 5);
+    let amount = 1000;
 
-    // Trigger airdrop
-    client.trigger_airdrop(&10, &20, &1, &100, &true, &None);
+    let event_id = create_airdrop_event(&client, &admin, conditions, amount, &token_address);
 
-    // Attempt to claim
-    client.claim_airdrop(&1);
+    let mut metrics = Map::new(&env);
+    metrics.set(symbol_short!("purchases"), 2);
+    set_user_metrics(&env, &contract_id, &admin, &user, metrics);
+
+    let result = client.try_claim_airdrop(&event_id);
+    assert_eq!(result, Err(Ok(AirdropError::UserNotEligible)));
 }
 
 #[test]
-#[should_panic(expected = "Already claimed")]
-fn test_claim_airdrop_multiple_times() {
-    let (env, admin, contract_id) = create_test_env();
+fn test_claim_airdrop_already_claimed() {
+    let (env, contract_id) = create_test_env();
     let client = AirdropContractClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
     let user = Address::generate(&env);
+    let (token_address, token_admin) = setup_token(&env);
 
-    // Initialize
     client.initialize(&admin);
 
-    // Set user data to meet eligibility
-    client.record_purchase(&user, &100);
-    client.record_activity(&user, &50);
-    client.set_loyalty_level(&user, &2);
+    let mut conditions = Map::new(&env);
+    conditions.set(symbol_short!("purchases"), 5);
+    let amount = 1000;
 
-    // Trigger airdrop
-    client.trigger_airdrop(&10, &20, &1, &100, &true, &None);
+    let event_id = create_airdrop_event(&client, &admin, conditions.clone(), amount, &token_address);
 
-    // Claim first time
-    client.claim_airdrop(&1);
+    let mut metrics = Map::new(&env);
+    metrics.set(symbol_short!("purchases"), 10);
+    set_user_metrics(&env, &contract_id, &admin, &user, metrics);
 
-    // Attempt to claim again
-    client.claim_airdrop(&1);
+    token_admin.mint(&contract_id, &10000);
+
+    client.claim_airdrop(&event_id);
+
+    let result = client.try_claim_airdrop(&event_id);
+    assert_eq!(result, Err(Ok(AirdropError::AlreadyClaimed)));
 }
 
 #[test]
-#[should_panic(expected = "Airdrop event not found")]
-fn test_claim_non_existent_event() {
-    let (env, admin, contract_id) = create_test_env();
+fn test_claim_airdrop_invalid_event() {
+    let (env, contract_id) = create_test_env();
     let client = AirdropContractClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
     let user = Address::generate(&env);
 
-    // Initialize
     client.initialize(&admin);
 
-    // Attempt to claim non-existent event
-    client.claim_airdrop(&999);
+    let result = client.try_claim_airdrop(&1);
+    assert_eq!(result, Err(Ok(AirdropError::AirdropNotFound)));
 }
 
 #[test]
-#[should_panic(expected = "Contract not initialized")]
-fn test_claim_uninitialized() {
-    let (env, _admin, contract_id) = create_test_env();
+#[should_panic(expected = "Error(Auth, InvalidAction)")]
+fn test_claim_airdrop_unauthenticated() {
+    let env = Env::default();
+    let contract_id = env.register_contract(None, AirdropContract);
     let client = AirdropContractClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+    let user = Address::generate(&env);
+    let (token_address, token_admin) = setup_token(&env);
+
+    env.mock_all_auths();
+    client.initialize(&admin);
+
+    let mut conditions = Map::new(&env);
+    conditions.set(symbol_short!("purchases"), 5);
+    let amount = 1000;
+
+    let event_id = create_airdrop_event(&client, &admin, conditions.clone(), amount, &token_address);
+
+    let mut metrics = Map::new(&env);
+    metrics.set(symbol_short!("purchases"), 10);
+    set_user_metrics(&env, &contract_id, &admin, &user, metrics);
+
+    token_admin.mint(&contract_id, &10000);
+
+    env.mock_all_auths_with_caller(&user);
+    client.claim_airdrop(&event_id);
+}
+
+#[test]
+fn test_distribute_all_success() {
+    let (env, contract_id) = create_test_env();
+    let client = AirdropContractClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+    let (token_address, token_admin) = setup_token(&env);
+    let token_client = TokenClient::new(&env, &token_address);
+
+    let users: Vec<Address> = (0..10)
+        .map(|_| Address::generate(&env))
+        .collect::<Vec<_>>();
+
+    client.initialize(&admin);
+
+    let mut conditions = Map::new(&env);
+    conditions.set(symbol_short!("purchases"), 5);
+    let amount = 1000;
+
+    let event_id = create_airdrop_event(&client, &admin, conditions.clone(), amount, &token_address);
+
+    let mut metrics_eligible = Map::new(&env);
+    metrics_eligible.set(symbol_short!("purchases"), 10);
+    let mut metrics_ineligible = Map::new(&env);
+    metrics_ineligible.set(symbol_short!("purchases"), 2);
+
+    for i in 0..10 {
+        let user = &users[i];
+        if i < 6... (continues as before)
+            set_user_metrics(&env, &contract_id, &admin, user, metrics_eligible.clone());
+        } else {
+            set_user_metrics(&env, &contract_id, &admin, user, metrics_ineligible.clone());
+        }
+    }
+
+    token_admin.mint(&contract_id, &10000);
+
+    client.distribute_all(&event_id, &users);
+
+    env.as_contract(&contract_id, || {
+        for i in 0..10 {
+            let user = &users[i];
+            let claimed: bool = env
+                .storage()
+                .persistent()
+                .get(&DataKey::Claimed(event_id, user.clone()))
+                .unwrap_or(false);
+            if i < 6 {
+                assert_eq!(token_client.balance(user), 1000);
+                assert!(claimed);
+            } else {
+                assert_eq!(token_client.balance(user), 0);
+                assert!(!claimed);
+            }
+        }
+    });
+
+    assert_eq!(token_client.balance(&contract_id), 4000);
+
+    let events = env.events().all();
+    assert_eq!(events.len(), 7);
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, Unauthorized)")]
+fn test_distribute_all_unauthorized() {
+    let (env, contract_id) = create_test_env();
+    let client = AirdropContractClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+    let non_admin = Address::generate(&env);
+    let (token_address, _) = setup_token(&env);
+
+    client.initialize(&admin);
+
+    let conditions = Map::new(&env);
+    let amount = 1000;
+
+    let event_id = create_airdrop_event(&client, &admin, conditions, amount, &token_address);
+
+    env.as_contract(&contract_id, || {
+        env.mock_all_auths_with_caller(&non_admin);
+    });
+    client.distribute_all(&event_id, &Vec::new(&env));
+}
+
+#[test]
+fn test_check_eligibility_success() {
+    let (env, contract_id) = create_test_env();
+    let client = AirdropContractClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+    let user = Address::generate(&env);
+    let (token_address, _) = setup_token(&env);
+
+    client.initialize(&admin);
+
+    let mut conditions = Map::new(&env);
+    conditions.set(symbol_short!("purchases"), 5);
+    let amount = 1000;
+
+    let event_id = create_airdrop_event(&client, &admin, conditions, amount, &token_address);
+
+    let mut metrics = Map::new(&env);
+    metrics.set(symbol_short!("purchases"), 10);
+    set_user_metrics(&env, &contract_id, &admin, &user, metrics);
+
+    env.as_contract(&contract_id, || {
+        let result = AirdropContract.check_eligibility(&env, &user, event_id);
+        assert!(result.is_ok());
+    });
+}
+
+#[test]
+fn test_check_eligibility_not_eligible() {
+    let (env, contract_id) = create_test_env();
+    let client = AirdropContractClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+    let user = Address::generate(&env);
+    let (token_address, _) = setup_token(&env);
+
+    client.initialize(&admin);
+
+    let mut conditions = Map::new(&env);
+    conditions.set(symbol_short!("purchases"), 5);
+    let amount = 1000;
+
+    let event_id = create_airdrop_event(&client, &admin, conditions, amount, &token_address);
+
+    let mut metrics = Map::new(&env);
+    metrics.set(symbol_short!("purchases"), 2);
+    set_user_metrics(&env, &contract_id, &admin, &user, metrics);
+
+    env.as_contract(&contract_id, || {
+        let result = AirdropContract.check_eligibility(&env, &user, event_id);
+        assert_eq!(result, Err(AirdropError::UserNotEligible));
+    });
+}
+
+#[test]
+fn test_update_user_data_success() {
+    let (env, contract_id) = create_test_env();
+    let client = AirdropContractClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
     let user = Address::generate(&env);
 
-    // Attempt to claim without initialization
-    client.claim_airdrop(&1);
+    client.initialize(&admin);
+
+    let mut metrics = Map::new(&env);
+    metrics.set(symbol_short!("purchases"), 10);
+    metrics.set(symbol_short!("loyalty"), 5);
+
+    env.as_contract(&contract_id, || {
+        AirdropContract.update_user_data(&env, &admin, &user, metrics.clone()).unwrap();
+    });
+
+    env.as_contract(&contract_id, || {
+        let user_data: UserData = env
+            .storage()
+            .persistent()
+            .get(&DataKey::UserData(user.clone()))
+            .unwrap();
+        assert_eq!(user_data.metrics, metrics);
+    });
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, Unauthorized)")]
+fn test_update_user_data_unauthorized() {
+    let (env, contract_id) = create_test_env();
+    let client = AirdropContractClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+    let non_admin = Address::generate(&env);
+    let user = Address::generate(&env);
+
+    client.initialize(&admin);
+
+    env.as_contract(&contract_id, || {
+        env.mock_all_auths_with_caller(&non_admin);
+        let metrics = Map::new(&env);
+        AirdropContract.update_user_data(&env, &non_admin, &user, metrics).unwrap();
+    });
+}
+
+#[test]
+fn test_get_user_data_default() {
+    let (env, contract_id) = create_test_env();
+    let client = AirdropContractClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+    let user = Address::generate(&env);
+
+    client.initialize(&admin);
+
+    env.as_contract(&contract_id, || {
+        let user_data = AirdropContract.get_user_data(&env, &user);
+        assert_eq!(user_data.metrics, Map::new(&env));
+    });
+}
+
+#[test]
+fn test_insufficient_contract_balance() {
+    let (env, contract_id) = create_test_env();
+    let client = AirdropContractClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+    let user = Address::generate(&env);
+    let (token_address, _) = setup_token(&env);
+
+    client.initialize(&admin);
+
+    let mut conditions = Map::new(&env);
+    conditions.set(symbol_short!("purchases"), 5);
+    let amount = 1000;
+
+    let event_id = create_airdrop_event(&client, &admin, conditions.clone(), amount, &token_address);
+
+    let mut metrics = Map::new(&env);
+    metrics.set(symbol_short!("purchases"), 10);
+    set_user_metrics(&env, &contract_id, &admin, &user, metrics);
+
+    let result = client.try_claim_airdrop(&event_id);
+    assert_eq!(result, Err(Ok(AirdropError::InsufficientContractBalance)));
 }
