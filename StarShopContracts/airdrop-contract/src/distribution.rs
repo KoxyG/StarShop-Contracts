@@ -1,5 +1,5 @@
 use crate::types::{AirdropError, AirdropEvent, DataKey, EventStats};
-use soroban_sdk::{Address, Env, Symbol, token};
+use soroban_sdk::{Address, Env, Symbol, Vec, token};
 
 impl super::AirdropContract {
     /// Transfer tokens from the contract to a user.
@@ -10,11 +10,6 @@ impl super::AirdropContract {
         to: &Address,
         amount: u64,
     ) -> Result<(), AirdropError> {
-        // Validate token address
-        if token_address == &Address::zero(env) {
-            return Err(AirdropError::InvalidTokenConfig);
-        }
-
         let token_client = token::TokenClient::new(env, token_address);
         let contract_address = env.current_contract_address();
         let contract_balance = token_client.balance(&contract_address);
@@ -35,7 +30,7 @@ impl super::AirdropContract {
     }
 
     /// Handle individual user airdrop claim.
-    fn distribute_tokens(
+    pub fn claim_tokens(
         &self,
         env: &Env,
         user: &Address,
@@ -135,17 +130,14 @@ impl super::AirdropContract {
     }
 
     /// Admin-triggered batch distribution to multiple users.
-    fn distribute_batch(
+    pub fn distribute_batch(
         &self,
         env: &Env,
         admin: &Address,
         event_id: u64,
-        users: soroban_sdk::Vec<Address>,
+        users: Vec<Address>,
     ) -> Result<(), AirdropError> {
         admin.require_auth();
-        if !self.is_admin(env, admin) {
-            return Err(AirdropError::Unauthorized);
-        }
 
         // Fetch and validate event
         let airdrop_event: AirdropEvent = env

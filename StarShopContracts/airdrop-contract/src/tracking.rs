@@ -1,77 +1,63 @@
-use crate::types::{AirdropError, DataKey, UserData};
-use soroban_sdk::{Address, Env, Map, Symbol, contracterror};
+use crate::types::{AirdropError, DataKey};
+use soroban_sdk::{Address, Env, Symbol};
 
-pub struct AirdropManager<'a> {
-    env: &'a Env,
-}
-
-impl<'a> AirdropManager<'a> {
-    /// Creates a new AirdropManager instance.
-    pub fn new(env: &'a Env) -> Self {
-        Self { env }
+impl super::AirdropContract {
+    /// Mark that a user has claimed an airdrop event.
+    pub fn mark_claimed(&self, env: &Env, user: &Address, event_id: u64) {
+        if !self.has_claimed(env, user, event_id) {
+            env.storage()
+                .persistent()
+                .set(&DataKey::Claimed(event_id, user.clone()), &true);
+            env.events().publish(
+                (Symbol::new(env, "ClaimMarked"), event_id, user.clone()),
+                true,
+            );
+        }
     }
 
-    /// Updates a user's metrics in storage.
-    ///
-    /// # Arguments
-    /// * `caller` - The address of the caller (must be admin).
-    /// * `user` - The address of the user whose data is being updated.
-    /// * `metrics` - Map of metric names to values to update.
-    ///
-    /// # Returns
-    /// * `Ok(())` on success.
-    /// * `Err(AirdropError)` if unauthorized.
-    pub fn update_user_data(
+    /// Check if a user has claimed an airdrop event.
+    pub fn has_claimed(&self, env: &Env, user: &Address, event_id: u64) -> bool {
+        env.storage()
+            .persistent()
+            .get(&DataKey::Claimed(event_id, user.clone()))
+            .unwrap_or(false)
+    }
+
+    /// Internal: Mark an airdrop event as finalized (admin-only).
+    pub fn internal_finalize_event(
         &self,
-        caller: &Address,
-        user: &Address,
-        metrics: Map<Symbol, u64>,
+        env: &Env,
+        admin: &Address,
+        event_id: u64,
     ) -> Result<(), AirdropError> {
-        // Verify caller is admin
-        let admin: Address = self
-            .env
+        admin.require_auth();
+
+        if !env
             .storage()
             .persistent()
-            .get(&DataKey::Admin)
-            .ok_or(AirdropError::Unauthorized)?;
-        if *caller != admin {
-            return Err(AirdropError::Unauthorized);
+            .has(&DataKey::AirdropEvent(event_id))
+        {
+            return Err(AirdropError::AirdropNotFound);
         }
 
-        // Require caller authentication
-        caller.require_auth();
-
-        // Retrieve current user data or default
-        let mut user_data = self.get_user_data(user);
-
-        // Update metrics
-        for (key, value) in metrics.iter() {
-            user_data.metrics.set(key, value);
+        if !self.internal_is_event_finalized(env, event_id) {
+            env.storage()
+                .persistent()
+                .set(&DataKey::EventStatus(event_id), &true);
+            env.events().publish(
+                (Symbol::new(env, "EventFinalized"), event_id, admin.clone()),
+                true,
+            );
         }
-
-        // Store updated data
-        self.env
-            .storage()
-            .persistent()
-            .set(&DataKey::UserData(user.clone()), &user_data);
 
         Ok(())
     }
 
-    /// Retrieves a user's data from storage.
-    ///
-    /// # Arguments
-    /// * `user` - The address of the user.
-    ///
-    /// # Returns
-    /// * `UserData` for the user, or default if none exists.
-    pub fn get_user_data(&self, user: &Address) -> UserData {
-        self.env
-            .storage()
+    /// Internal: Check if an airdrop event is finalized.
+    pub fn internal_is_event_finalized(&self, env: &Env, event_id: u64) -> bool {
+        env.storage()
             .persistent()
-            .get(&DataKey::UserData(user.clone()))
-            .unwrap_or(UserData {
-                metrics: Map::new(self.env),
-            })
+            .get(&DataKey::EventStatus(event_id))
+            .unwrap_or(false)
     }
 }
