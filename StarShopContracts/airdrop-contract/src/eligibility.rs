@@ -66,7 +66,11 @@ impl super::AirdropContract {
 
             // Call the provider's get_metric function
             let client = MetricProviderClient::new(env, &provider_address);
-            let user_metric = client.get_user_metric(user, &condition.clone());
+            let user_metric = client
+                .try_get_user_metric(user, &condition.clone())
+                .map_err(|_| AirdropError::ProviderCallFailed)?;
+
+            let user_metric = user_metric.unwrap();
 
             // Check if the metric meets the requirement
             if user_metric < required_value {

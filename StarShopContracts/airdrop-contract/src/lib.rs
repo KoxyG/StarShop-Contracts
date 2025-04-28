@@ -4,6 +4,7 @@ use soroban_sdk::{Address, Bytes, Env, Map, Symbol, Vec, contract, contractimpl}
 mod distribution;
 mod eligibility;
 mod external;
+mod test;
 mod tracking;
 mod types;
 
@@ -40,10 +41,6 @@ impl AirdropContract {
             }
         }
 
-        // env.events().publish(
-        //     (Symbol::new(&env, "Initialized"), admin),
-        //     initial_providers.as_ref().map(|p| p.len()).unwrap_or(0).clone(),
-        // );
         Ok(())
     }
 
@@ -290,7 +287,7 @@ impl AirdropContract {
     pub fn list_claimed_users(
         env: Env,
         event_id: u64,
-        max_results: u32,
+        _max_results: u32,
     ) -> Result<Vec<Address>, AirdropError> {
         if !env
             .storage()
