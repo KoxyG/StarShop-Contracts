@@ -1,21 +1,37 @@
-use soroban_sdk::{Address, Map, Symbol, contracterror, contracttype};
+use soroban_sdk::{Address, Bytes, Map, Symbol, contracterror, contracttype};
 
-/// Represents an airdrop event with dynamic eligibility conditions.
+/// Represents an airdrop event with dynamic eligibility conditions and constraints.
 #[contracttype]
 pub struct AirdropEvent {
+    /// Human-readable name for the airdrop event (e.g., "Loyalty Rewards - July 2025").
+    pub name: Symbol,
+    /// Detailed description of the airdrop event.
+    pub description: Bytes,
     /// Map of condition names to minimum required values (e.g., "purchases" -> 5).
     pub conditions: Map<Symbol, u64>,
     /// Amount of tokens to distribute to each eligible user.
     pub amount: u64,
     /// Address of the token contract (XLM or custom token).
     pub token_address: Address,
+    /// Start timestamp (Unix seconds) for the event.
+    pub start_time: u64,
+    /// End timestamp (Unix seconds) for the event.
+    pub end_time: u64,
+    /// Optional max number of users who can claim.
+    pub max_users: Option<u64>,
+    /// Optional max total tokens to distribute.
+    pub max_total_amount: Option<u64>,
+    /// Whether the event is active (e.g., not paused or canceled).
+    pub is_active: bool,
 }
 
-/// Represents a user's data with dynamic metrics.
+/// Statistics for an airdrop event.
 #[contracttype]
-pub struct UserData {
-    /// Map of user metrics (e.g., "purchases" -> 10, "activity_points" -> 100).
-    pub metrics: Map<Symbol, u64>,
+pub struct EventStats {
+    /// Number of users who have claimed.
+    pub recipient_count: u64,
+    /// Total tokens distributed.
+    pub total_distributed: u64,
 }
 
 /// Storage keys for persistent data in the contract.
@@ -29,8 +45,12 @@ pub enum DataKey {
     AirdropEvent(u64),
     /// Key to track if a user has claimed an airdrop, identified by event ID and user address.
     Claimed(u64, Address),
-    /// Key for a user's data, identified by their address.
-    UserData(Address),
+    /// Key to track event status (e.g., finalized), identified by event ID.
+    EventStatus(u64),
+    /// Key for event statistics, identified by event ID.
+    EventStats(u64),
+    /// Key for the provider registry, mapping condition Symbol to provider Address.
+    ProviderRegistry(Symbol),
 }
 
 /// Error codes for the airdrop contract.
@@ -48,4 +68,9 @@ pub enum AirdropError {
     TokenTransferFailed = 8,
     ConditionNotFound = 9,
     InvalidAmount = 10,
+    ProviderNotConfigured = 11,
+    ProviderCallFailed = 12,
+    EventInactive = 13,
+    CapExceeded = 14,
+    InvalidEventConfig = 15,
 }
