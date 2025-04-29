@@ -1,5 +1,5 @@
 #![no_std]
-use soroban_sdk::{Address, Bytes, Env, Map, Symbol, Vec, contract, contractimpl};
+use soroban_sdk::{contract, contractimpl, Address, Bytes, Env, Map, Symbol, Vec};
 
 mod distribution;
 mod eligibility;
@@ -45,7 +45,7 @@ impl AirdropContract {
     }
 
     /// Create a new airdrop event.
-    pub fn trigger_airdrop(
+    pub fn create_airdrop(
         env: Env,
         admin: Address,
         name: Symbol,
