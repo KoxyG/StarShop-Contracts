@@ -176,10 +176,22 @@ impl Auction {
         // Check if the target price has been reached
         if let Some(target_price) = conditions.on_target_price {
             if let Some(curr_bid_amount) = self.curr_bid_amount {
-                if curr_bid_amount < target_price {
-                    panic_with_error!(&env, ConditionError::TargetPriceNotReached);
-                } else {
-                    return;
+                match conditions.auction_type {
+                    AuctionType::Regular => {
+                        if curr_bid_amount < target_price {
+                            panic_with_error!(&env, ConditionError::TargetPriceNotReached);
+                        } else {
+                            return;
+                        }
+                    }
+                    AuctionType::Reverse => {
+                        if curr_bid_amount > target_price {
+                            panic_with_error!(&env, ConditionError::TargetPriceReached);
+                        } else {
+                            return;
+                        }
+                    }
+                    _ => (),
                 }
             }
         }
