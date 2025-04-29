@@ -1,5 +1,5 @@
 #![no_std]
-use soroban_sdk::{contract, contractimpl, Address, Bytes, Env, Map, Symbol, Vec};
+use soroban_sdk::{Address, Bytes, Env, Map, Symbol, Vec, contract, contractimpl};
 
 mod distribution;
 mod eligibility;
@@ -7,6 +7,9 @@ mod external;
 mod test;
 mod tracking;
 mod types;
+
+pub use distribution::*;
+pub use tracking::*;
 
 use types::{AirdropError, AirdropEvent, DataKey, EventStats};
 
@@ -51,12 +54,12 @@ impl AirdropContract {
         name: Symbol,
         description: Bytes,
         conditions: Map<Symbol, u64>,
-        amount: u64,
+        amount: i128,
         token_address: Address,
         start_time: u64,
         end_time: u64,
         max_users: Option<u64>,
-        max_total_amount: Option<u64>,
+        max_total_amount: Option<i128>,
     ) -> Result<u64, AirdropError> {
         admin.require_auth();
 
@@ -65,6 +68,7 @@ impl AirdropContract {
             return Err(AirdropError::InvalidEventConfig);
         }
         let current_time = env.ledger().timestamp();
+
         if start_time < current_time || end_time <= start_time {
             return Err(AirdropError::InvalidEventConfig);
         }
@@ -104,12 +108,16 @@ impl AirdropContract {
             &DataKey::EventStats(new_event_id),
             &EventStats {
                 recipient_count: 0,
-                total_distributed: 0,
+                total_amount_distributed: 0,
             },
         );
 
         env.events().publish(
-            (Symbol::new(&env, "AirdropTriggered"), new_event_id, admin),
+            (
+                Symbol::new(&env, "CreatedAirdropEvent"),
+                new_event_id,
+                admin,
+            ),
             (current_time, amount),
         );
 
@@ -118,19 +126,18 @@ impl AirdropContract {
 
     /// User claims tokens for an airdrop event.
     pub fn claim_airdrop(env: Env, user: Address, event_id: u64) -> Result<(), AirdropError> {
-        user.require_auth();
-        Self::claim_tokens(&AirdropContract, &env, &user, event_id)
+        claim_tokens(env, user, event_id)
     }
 
     /// Admin triggers batch distribution.
-    pub fn distribute_all(
+    pub fn distribute_batch(
         env: Env,
         admin: Address,
         event_id: u64,
         users: Vec<Address>,
     ) -> Result<(), AirdropError> {
         admin.require_auth();
-        Self::distribute_batch(&AirdropContract, &env, &admin, event_id, users)
+        distribute_batch(env, admin, event_id, users)
     }
 
     /// Register a metric provider.
@@ -247,7 +254,7 @@ impl AirdropContract {
 
     /// Finalize an airdrop event.
     pub fn finalize_event(env: Env, admin: Address, event_id: u64) -> Result<(), AirdropError> {
-        Self::internal_finalize_event(&AirdropContract, &env, &admin, event_id)
+        internal_finalize_event(env, admin, event_id)
     }
 
     /// Update the admin address.
