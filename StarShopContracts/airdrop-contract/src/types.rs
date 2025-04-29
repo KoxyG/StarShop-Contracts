@@ -11,7 +11,7 @@ pub struct AirdropEvent {
     /// Map of condition names to minimum required values (e.g., "purchases" -> 5).
     pub conditions: Map<Symbol, u64>,
     /// Amount of tokens to distribute to each eligible user.
-    pub amount: u64,
+    pub amount: i128,
     /// Address of the token contract (XLM or custom token).
     pub token_address: Address,
     /// Start timestamp (Unix seconds) for the event.
@@ -21,7 +21,7 @@ pub struct AirdropEvent {
     /// Optional max number of users who can claim.
     pub max_users: Option<u64>,
     /// Optional max total tokens to distribute.
-    pub max_total_amount: Option<u64>,
+    pub max_total_amount: Option<i128>,
     /// Whether the event is active (e.g., not paused or canceled).
     pub is_active: bool,
 }
@@ -32,7 +32,7 @@ pub struct EventStats {
     /// Number of users who have claimed.
     pub recipient_count: u64,
     /// Total tokens distributed.
-    pub total_distributed: u64,
+    pub total_amount_distributed: i128,
 }
 
 /// Storage keys for persistent data in the contract.
@@ -43,11 +43,10 @@ pub enum DataKey {
     /// Key for the current event ID counter.
     EventId,
     /// Key for an airdrop event, identified by its event ID.
-    AirdropEvent(u64),
+    AirdropEventId(u64),
     /// Key to track if a user has claimed an airdrop, identified by event ID and user address.
     Claimed(u64, Address),
-    /// Key to track event status (e.g., finalized), identified by event ID.
-    EventStatus(u64),
+
     /// Key for event statistics, identified by event ID.
     EventStats(u64),
     /// Key for the provider registry, mapping condition Symbol to provider Address.
