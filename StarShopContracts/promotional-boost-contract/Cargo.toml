@@ -1,0 +1,16 @@
+[package]
+name = "promotional-boost-contract"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["lib", "cdylib"]
+doctest = false
+
+[dependencies]
+soroban-sdk = { workspace = true }
+stellar_sdk = "0.1.4"
+
+[dev-dependencies]
+soroban-sdk = { workspace = true, features = ["testutils"] }
