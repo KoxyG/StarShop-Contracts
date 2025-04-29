@@ -1,4 +1,4 @@
-use soroban_sdk::{contractclient, contracterror, Address, Symbol};
+use soroban_sdk::{Address, Symbol, contractclient, contracterror};
 
 /// Error codes for provider contracts.
 #[contracterror]
@@ -11,6 +11,8 @@ pub enum ProviderError {
 }
 
 /// Interface for metric provider contracts (e.g., Referral, Subscription, Loyalty).
+/// 
+#[allow(dead_code)]
 #[contractclient(name = "MetricProviderClient")]
 pub trait MetricProvider {
     /// Returns the user's metric value for the given metric key.

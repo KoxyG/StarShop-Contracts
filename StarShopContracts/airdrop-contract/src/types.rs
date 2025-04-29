@@ -43,7 +43,7 @@ pub enum DataKey {
     /// Key for the current event ID counter.
     EventId,
     /// Key for an airdrop event, identified by its event ID.
-    AirdropEventId(u64),
+    AirdropEvent(u64),
     /// Key to track if a user has claimed an airdrop, identified by event ID and user address.
     Claimed(u64, Address),
 
