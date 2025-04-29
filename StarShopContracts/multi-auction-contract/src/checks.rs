@@ -68,7 +68,13 @@ impl Auction {
                             panic_with_error!(&env, ConditionError::TargetPriceReached);
                         }
                     }
-                    _ => (),
+                    AuctionType::Dutch(_) => {
+                        if curr_bid_amount <= target_price {
+                            panic_with_error!(&env, ConditionError::TargetPriceReached);
+                        } else {
+                            return;
+                        }
+                    }
                 }
             }
         }
@@ -186,12 +192,18 @@ impl Auction {
                     }
                     AuctionType::Reverse => {
                         if curr_bid_amount > target_price {
-                            panic_with_error!(&env, ConditionError::TargetPriceReached);
+                            panic_with_error!(&env, ConditionError::TargetPriceNotReached);
                         } else {
                             return;
                         }
                     }
-                    _ => (),
+                    AuctionType::Dutch(_) => {
+                        if curr_bid_amount > target_price {
+                            panic_with_error!(&env, ConditionError::TargetPriceNotReached);
+                        } else {
+                            return;
+                        }
+                    }
                 }
             }
         }
