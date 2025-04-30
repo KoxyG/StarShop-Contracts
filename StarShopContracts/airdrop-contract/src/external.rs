@@ -11,7 +11,7 @@ pub enum ProviderError {
 }
 
 /// Interface for metric provider contracts (e.g., Referral, Subscription, Loyalty).
-/// 
+///
 #[allow(dead_code)]
 #[contractclient(name = "MetricProviderClient")]
 pub trait MetricProvider {

@@ -3,7 +3,7 @@ use soroban_sdk::{Address, Env, Symbol};
 
 /// Check if a user is eligible for an airdrop event.
 pub fn check_eligibility(env: &Env, user: &Address, event_id: u64) -> Result<(), AirdropError> {
-    user.require_auth();
+    //user.require_auth();
 
     // Fetch the airdrop event
     let airdrop_event: AirdropEvent = env

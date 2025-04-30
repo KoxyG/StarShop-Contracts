@@ -2,7 +2,6 @@ use soroban_sdk::{Address, Bytes, Map, Symbol, contracterror, contracttype};
 
 /// Represents an airdrop event with dynamic eligibility conditions and constraints.
 #[contracttype]
-
 pub struct AirdropEvent {
     /// Human-readable name for the airdrop event (e.g., "Loyalty Rewards - July 2025").
     pub name: Symbol,
@@ -46,11 +45,12 @@ pub enum DataKey {
     AirdropEvent(u64),
     /// Key to track if a user has claimed an airdrop, identified by event ID and user address.
     Claimed(u64, Address),
-
     /// Key for event statistics, identified by event ID.
     EventStats(u64),
     /// Key for the provider registry, mapping condition Symbol to provider Address.
     ProviderRegistry(Symbol),
+    /// Key for the list of users who claimed an airdrop, identified by event ID.
+    ClaimedUsers(u64),
 }
 
 /// Error codes for the airdrop contract.

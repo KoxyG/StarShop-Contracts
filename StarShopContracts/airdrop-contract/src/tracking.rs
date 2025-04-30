@@ -1,12 +1,27 @@
 use crate::types::*;
-use soroban_sdk::{Address, Env, Symbol};
+use soroban_sdk::{Address, Env, Symbol, Vec};
 
 /// Mark that a user has claimed an airdrop event.
 pub fn mark_claimed(env: &Env, user: &Address, event_id: u64) {
-    if has_claimed(&env, &user, event_id) {
+    // Skip if already marked to avoid redundant storage updates
+    if !has_claimed(&env, user, event_id) {
+        // Mark user as claimed
         env.storage()
             .persistent()
             .set(&DataKey::Claimed(event_id, user.clone()), &true);
+
+        // Append user to the claimed users list
+        let mut claimed_users: Vec<Address> = env
+            .storage()
+            .persistent()
+            .get(&DataKey::ClaimedUsers(event_id))
+            .unwrap_or_else(|| Vec::new(env));
+        claimed_users.push_back(user.clone());
+        env.storage()
+            .persistent()
+            .set(&DataKey::ClaimedUsers(event_id), &claimed_users);
+
+        // Emit event
         env.events().publish(
             (Symbol::new(&env, "ClaimMarked"), event_id, user.clone()),
             true,

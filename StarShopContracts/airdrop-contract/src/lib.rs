@@ -136,7 +136,6 @@ impl AirdropContract {
         event_id: u64,
         users: Vec<Address>,
     ) -> Result<(), AirdropError> {
-        admin.require_auth();
         distribute_batch(env, admin, event_id, users)
     }
 
@@ -294,7 +293,7 @@ impl AirdropContract {
     pub fn list_claimed_users(
         env: Env,
         event_id: u64,
-        _max_results: u32,
+        max_results: u32,
     ) -> Result<Vec<Address>, AirdropError> {
         if !env
             .storage()
@@ -303,8 +302,25 @@ impl AirdropContract {
         {
             return Err(AirdropError::AirdropNotFound);
         }
-        // Placeholder: Assumes off-chain indexer for production.
-        Ok(Vec::new(&env))
+
+        let claimed_users: Vec<Address> = env
+            .storage()
+            .persistent()
+            .get(&DataKey::ClaimedUsers(event_id))
+            .unwrap_or_else(|| Vec::new(&env));
+
+        // Return up to max_results users
+        let result = if max_results > claimed_users.len() {
+            claimed_users
+        } else {
+            let mut truncated = Vec::new(&env);
+            for i in 0..max_results {
+                truncated.push_back(claimed_users.get(i).unwrap());
+            }
+            truncated
+        };
+
+        Ok(result)
     }
 
     /// Query a provider address for a metric.
