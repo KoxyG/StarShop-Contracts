@@ -1,60 +1,45 @@
-use stellar_sdk::{
-    transaction::TransactionBuilder,
-    asset::Asset,
-    types::IntoAmount,
-    types::{PublicKey, SecretKey},
-    network::Network,
-    operations::{Operation, PaymentOperation},
-    Server,
-};
+use soroban_sdk::{Address, Env, token};
 
-use std::str::FromStr;
+pub struct PaymentProcessor;
 
-pub struct PaymentManager {
-    server: Server,
-    network: Network,
-    sender_secret: SecretKey,
-}
-
-impl PaymentManager {
-    pub fn new(secret: &str) -> Self {
-        let sender_secret = SecretKey::from_encoding(secret).expect("Invalid secret key");
-        let network = Network::new_test();
-        let server = Server::new("https://horizon-testnet.stellar.org").unwrap();
-
-        Self {
-            server,
-            network,
-            sender_secret,
+impl PaymentProcessor {
+    /// Accepts a payment in XLM from the seller and verifies it's at least the required amount
+    pub fn collect_payment(
+        env: &Env,
+        from: &Address,
+        amount: i128,
+        price_required: i128,
+    ) -> Result<(), &'static str> {
+        if amount < price_required {
+            return Err("Insufficient payment");
         }
-    }
 
-    pub async fn process_payment(&self, destination: &str, xlm_amount: &str) -> Result<(), String> {
-        let destination_pk = PublicKey::from_account_id(destination)
-            .map_err(|e| format!("Invalid destination: {}", e))?;
-
-        let source_account = self
-            .server
-            .load_account(&self.sender_secret.public_key())
-            .await
-            .map_err(|e| format!("Failed to load source account: {}", e))?;
-
-        let payment_op = Operation::new_payment(PaymentOperation::new(
-            destination_pk.clone(),
-            (xlm_amount.parse::<f64>().unwrap() * 10_000_000.0) as i64, // 1 XLM = 10^7 stroops
-        ));
-
-        let tx = TransactionBuilder::new(source_account, self.network.clone())
-            .add_operation(payment_op)
-            .build()
-            .map_err(|e| format!("Failed to build transaction: {}", e))?
-            .sign(&self.sender_secret);
-
-        self.server
-            .submit_transaction(&tx)
-            .await
-            .map_err(|e| format!("Payment failed: {:?}", e))?;
+        let token_id = Address::from_str(&env, "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC");
+        let token = token::Client::new(&env, &token_id);
+        token.transfer(from, &env.current_contract_address(), &amount);
 
         Ok(())
+    }
+
+    /// Refund a payment in XLM to the given address
+    pub fn refund_payment(env: &Env, to: &Address, amount: i128) -> Result<(), &'static str> {
+        if amount <= 0 {
+            return Err("Nothing to refund");
+        }
+
+        let token_id = Address::from_str(&env, "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC");
+        let token = token::Client::new(&env, &token_id);
+        token.transfer(&env.current_contract_address(), to, &amount);
+
+        Ok(())
+    }
+
+    /// Calculates required slot price (fixed-tier example, but can be replaced with auction logic)
+    pub fn calculate_price(duration_secs: u64) -> i128 {
+        let base_price = 5_000_000i128; // 5 XLM in stroops (1 XLM = 1_000_000 stroops)
+        let daily_rate = base_price;   // per day rate
+
+        let days = (duration_secs as f64 / 86400.0).ceil() as i128;
+        days * daily_rate
     }
 }
