@@ -1,4 +1,3 @@
-
 use soroban_sdk::{contracttype, symbol_short, Address, Env, Map, Symbol, Vec};
 
 #[derive(Clone)]
@@ -15,13 +14,12 @@ pub struct BoostSlot {
 #[derive(Clone)]
 #[contracttype]
 pub struct SlotManager {
-    pub slots: Map<u64, BoostSlot>,                 // SlotID → Slot
-    pub category_slots: Map<Symbol, Vec<u64>>,      // Category → SlotIDs
-    pub max_slots: Map<Symbol, u32>,                 // Category → Max slot count
+    pub slots: Map<u64, BoostSlot>,            // SlotID → Slot
+    pub category_slots: Map<Symbol, Vec<u64>>, // Category → SlotIDs
+    pub max_slots: Map<Symbol, u32>,           // Category → Max slot count
 }
 
 impl SlotManager {
-
     const STORAGE_KEY: Symbol = symbol_short!("slots");
 
     pub fn new(env: &Env) -> Self {
@@ -48,14 +46,17 @@ impl SlotManager {
         current_time: u64,
     ) -> Option<u64> {
         let category_key = category.clone(); // Clone once for reuse
-    
+
         // Remove expired slots
         self.remove_expired_slots(env, category_key.clone(), current_time);
-    
+
         // Get current slot list or empty
-        let mut slot_ids = self.category_slots.get(category_key.clone()).unwrap_or(Vec::new(env));
+        let mut slot_ids = self
+            .category_slots
+            .get(category_key.clone())
+            .unwrap_or(Vec::new(env));
         let max_slots = self.max_slots.get(category_key.clone()).unwrap_or(3); // default: 3
-    
+
         if slot_ids.len() < max_slots.into() {
             // There's room → add slot
             let slot = BoostSlot {
@@ -70,11 +71,11 @@ impl SlotManager {
             self.category_slots.set(category_key, slot_ids);
             return None;
         }
-    
+
         // Full → check for lowest price replacement
         let mut lowest_slot_id: Option<u64> = None;
         let mut lowest_price: u64 = u64::MAX;
-    
+
         for sid in slot_ids.iter() {
             let slot = self.slots.get(sid).unwrap();
             if slot.price_paid < lowest_price {
@@ -82,11 +83,11 @@ impl SlotManager {
                 lowest_slot_id = Some(sid);
             }
         }
-    
+
         if price_paid > lowest_price {
             let replace_id = lowest_slot_id.unwrap();
             self.slots.remove(replace_id);
-    
+
             // Rebuild slot list without the replaced slot
             let mut updated_ids = Vec::new(env);
             for id in slot_ids.iter() {
@@ -95,7 +96,7 @@ impl SlotManager {
                 }
             }
             updated_ids.push_back(slot_id);
-    
+
             let new_slot = BoostSlot {
                 product_id,
                 seller: seller.clone(),
@@ -103,22 +104,23 @@ impl SlotManager {
                 end_time: current_time + duration,
                 price_paid,
             };
-    
+
             self.slots.set(slot_id, new_slot);
             self.category_slots.set(category_key, updated_ids);
-    
+
             return Some(replace_id); // refund the replaced slot
         }
-    
+
         // Did not win bid
         None
     }
-    
 
     pub fn remove_expired_slots(&mut self, env: &Env, category: Symbol, current_time: u64) {
-
         let category_key = category.clone();
-        let slot_ids = self.category_slots.get(category_key).unwrap_or(Vec::new(env));
+        let slot_ids = self
+            .category_slots
+            .get(category_key)
+            .unwrap_or(Vec::new(env));
         let mut active_ids = Vec::new(env);
 
         for slot_id in slot_ids.iter() {
@@ -135,7 +137,9 @@ impl SlotManager {
     }
 
     pub fn get_active_slots(&self, category: Symbol) -> Vec<u64> {
-        self.category_slots.get(category).unwrap_or(Vec::new(&self.slots.env()))
+        self.category_slots
+            .get(category)
+            .unwrap_or(Vec::new(&self.slots.env()))
     }
 
     pub fn get_slot(&self, slot_id: u64) -> Option<BoostSlot> {
@@ -147,6 +151,9 @@ impl SlotManager {
     }
 
     pub fn load_or_default(env: &Env) -> Self {
-        env.storage().instance().get(&Self::STORAGE_KEY).unwrap_or(Self::new(env))
+        env.storage()
+            .instance()
+            .get(&Self::STORAGE_KEY)
+            .unwrap_or(Self::new(env))
     }
 }

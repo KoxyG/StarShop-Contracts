@@ -1,4 +1,4 @@
-use soroban_sdk::{Address, Env, token};
+use soroban_sdk::{token, Address, Env};
 
 pub struct PaymentProcessor;
 
@@ -14,7 +14,10 @@ impl PaymentProcessor {
             return Err("Insufficient payment");
         }
 
-        let token_id = Address::from_str(&env, "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC");
+        let token_id = Address::from_str(
+            &env,
+            "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC",
+        );
         let token = token::Client::new(&env, &token_id);
         token.transfer(from, &env.current_contract_address(), &amount);
 
@@ -27,7 +30,10 @@ impl PaymentProcessor {
             return Err("Nothing to refund");
         }
 
-        let token_id = Address::from_str(&env, "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC");
+        let token_id = Address::from_str(
+            &env,
+            "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC",
+        );
         let token = token::Client::new(&env, &token_id);
         token.transfer(&env.current_contract_address(), to, &amount);
 
@@ -37,7 +43,7 @@ impl PaymentProcessor {
     /// Calculates required slot price (fixed-tier example, but can be replaced with auction logic)
     pub fn calculate_price(duration_secs: u64) -> i128 {
         let base_price = 5_000_000i128; // 5 XLM in stroops (1 XLM = 1_000_000 stroops)
-        let daily_rate = base_price;   // per day rate
+        let daily_rate = base_price; // per day rate
 
         let days = (duration_secs as f64 / 86400.0).ceil() as i128;
         days * daily_rate

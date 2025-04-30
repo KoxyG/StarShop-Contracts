@@ -1,4 +1,4 @@
-use soroban_sdk::{Env, Address, Map, Vec, Symbol, contracttype, symbol_short};
+use soroban_sdk::{contracttype, symbol_short, Address, Env, Map, Symbol, Vec};
 
 #[derive(Clone)]
 #[contracttype]
@@ -13,11 +13,10 @@ pub struct BoostVisibility {
 #[derive(Clone)]
 #[contracttype]
 pub struct VisibilityManager {
-    pub boosts: Map<u64, BoostVisibility>,     // product_id → visibility info
+    pub boosts: Map<u64, BoostVisibility>, // product_id → visibility info
 }
 
 impl VisibilityManager {
-
     const STORAGE_KEY: Symbol = symbol_short!("visibile");
 
     pub fn new(env: &Env) -> Self {
@@ -90,6 +89,9 @@ impl VisibilityManager {
     }
 
     pub fn load_or_default(env: &Env) -> Self {
-        env.storage().instance().get(&Self::STORAGE_KEY).unwrap_or(Self::new(env))
+        env.storage()
+            .instance()
+            .get(&Self::STORAGE_KEY)
+            .unwrap_or(Self::new(env))
     }
 }
