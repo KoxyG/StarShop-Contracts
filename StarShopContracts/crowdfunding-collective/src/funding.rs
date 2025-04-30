@@ -1,5 +1,5 @@
 use crate::types::*;
-use soroban_sdk::{Address, Env, Vec};
+use soroban_sdk::{Address, Env, Symbol, Vec};
 
 pub fn contribute(env: Env, contributor: Address, product_id: u32, amount: u64) {
     contributor.require_auth();
@@ -57,8 +57,10 @@ pub fn contribute(env: Env, contributor: Address, product_id: u32, amount: u64) 
 
     // Emit event with explicit type annotation
     let event_data: i128 = amount as i128;
-    env.events()
-        .publish(("Contribution", product_id, contributor), event_data);
+    env.events().publish(
+        (Symbol::new(&env, "Contribution"), product_id, contributor),
+        event_data,
+    );
 }
 
 pub fn distribute_funds(env: Env, product_id: u32) {
@@ -86,8 +88,10 @@ pub fn distribute_funds(env: Env, product_id: u32) {
 
     // Emit event with explicit type annotation
     let event_data: i128 = product.total_funded as i128;
-    env.events()
-        .publish(("FundsDistributed", product_id), event_data);
+    env.events().publish(
+        (Symbol::new(&env, "FundsDistributed"), product_id),
+        event_data,
+    );
 }
 
 pub fn refund_contributors(env: Env, product_id: u32) {
@@ -113,8 +117,14 @@ pub fn refund_contributors(env: Env, product_id: u32) {
     for contribution in contributions.iter() {
         // Emit event with explicit type annotation
         let event_data: i128 = contribution.amount as i128;
-        env.events()
-            .publish(("Refund", product_id, contribution.contributor), event_data);
+        env.events().publish(
+            (
+                Symbol::new(&env, "Refund"),
+                product_id,
+                contribution.contributor,
+            ),
+            event_data,
+        );
     }
 
     env.storage().instance().set(
