@@ -4,7 +4,6 @@ use soroban_sdk::{Address, Bytes, Env, Map, Symbol, Vec, contract, contractimpl}
 mod distribution;
 mod eligibility;
 mod external;
-mod test;
 mod tracking;
 mod types;
 
