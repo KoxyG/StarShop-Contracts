@@ -1,12 +1,13 @@
 [workspace]
 resolver = "2"
-members = [
+members = [ "StarShopContracts/crowdfunding-collective",
     "StarShopContracts/example-contract",
     "StarShopContracts/implement-nft-contract",
     "StarShopContracts/implement-payment-contract",
     "StarShopContracts/product-follow-contract",
     "StarShopContracts/product-voting-contract",
     "StarShopContracts/referral-contract",
+    "StarShopContracts/crowdfunding-collective",
 ]
 
 [workspace.dependencies]
