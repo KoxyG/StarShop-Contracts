@@ -4,7 +4,6 @@ use soroban_sdk::{Address, Env, String, Vec, contract, contractimpl};
 mod funding;
 mod product;
 mod rewards;
-mod test;
 mod tracking;
 mod types;
 
