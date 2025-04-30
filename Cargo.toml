@@ -1,6 +1,7 @@
 [workspace]
 resolver = "2"
-members = [ "StarShopContracts/airdrop-contract",
+members = [ 
+    "StarShopContracts/airdrop-contract",
     "StarShopContracts/example-contract",
     "StarShopContracts/implement-nft-contract",
     "StarShopContracts/implement-payment-contract",
