@@ -7,7 +7,7 @@ members = [
     "StarShopContracts/product-follow-contract",
     "StarShopContracts/product-voting-contract",
     "StarShopContracts/referral-contract",
-    "StarShopContracts/promotional-boost-contract"
+    "StarShopContracts/promotional-boost-contract",
     "StarShopContracts/multi-auction-contract",
 ]
 
