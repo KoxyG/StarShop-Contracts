@@ -1,19 +1,4 @@
-use soroban_sdk::{contracttype, symbol_short, Address, Symbol};
-
-// Symbol representing GAME events.
-pub const AUCTION: Symbol = symbol_short!("AUCTION");
-
-// Symbol representing ADD events.
-pub const CREATE: Symbol = symbol_short!("CREATE");
-
-// Symbol representing ADD events.
-pub const CANCEL: Symbol = symbol_short!("CANCEL");
-
-// Symbol representing ADD events.
-pub const END: Symbol = symbol_short!("END");
-
-// Symbol representing Vote events.
-pub const BID: Symbol = symbol_short!("BID");
+use soroban_sdk::{contracttype, Address};
 
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]

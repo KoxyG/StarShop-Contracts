@@ -1,11 +1,9 @@
-use crate::event::{
-    AuctionCanceled, AuctionCompleted, AuctionCreated, NewBidPlaced, AUCTION, BID, CANCEL, CREATE,
-};
+use crate::event::{AuctionCanceled, AuctionCompleted, AuctionCreated, NewBidPlaced};
 use crate::traits::AuctionTrait;
 use crate::{bid::record_bid, errors::AuctionError};
 use crate::{distribution, types::*};
 use soroban_sdk::{
-    contract, contractimpl, contracttype, panic_with_error, Address, Env, IntoVal, Val,
+    contract, contractimpl, contracttype, panic_with_error, Address, Env, IntoVal, Symbol, Val,
 };
 
 #[contract]
@@ -66,8 +64,9 @@ impl AuctionTrait for AuctionContract {
         // Update total auctions count
         Self::_save_total_auctions(&env, &total_auctions);
 
+        // Emit Auction Created event
         env.events().publish(
-            (AUCTION, CREATE),
+            (Symbol::new(&env, "new_auction_created"), owner.clone()),
             AuctionCreated {
                 auction_id,
                 owner,
@@ -110,8 +109,9 @@ impl AuctionTrait for AuctionContract {
         // Save updated auction state
         Self::_save_auction(&env, auction_id, &auction_data);
 
+        // Emit New Bid event
         env.events().publish(
-            (AUCTION, BID),
+            (Symbol::new(&env, "new_bid_placed"), bidder.clone()),
             NewBidPlaced {
                 auction_id,
                 bidder,
@@ -151,8 +151,12 @@ impl AuctionTrait for AuctionContract {
 
         Self::_save_auction(&env, auction_id, &auction_data);
 
+        // Emit Auction Canceled event
         env.events().publish(
-            (AUCTION, CANCEL),
+            (
+                Symbol::new(&env, "auction_canceled"),
+                auction_data.owner.clone(),
+            ),
             AuctionCanceled {
                 auction_id,
                 owner: auction_data.owner,
@@ -208,7 +212,10 @@ impl AuctionTrait for AuctionContract {
         Self::_save_auction(&env, auction_id, &auction_data);
 
         env.events().publish(
-            (AUCTION, CANCEL),
+            (
+                Symbol::new(&env, "auction_completed"),
+                auction_data.curr_bidder.clone(),
+            ),
             AuctionCompleted {
                 auction_id,
                 winner: auction_data.curr_bidder,
