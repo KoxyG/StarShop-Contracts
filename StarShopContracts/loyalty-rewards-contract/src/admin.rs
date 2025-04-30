@@ -1,5 +1,5 @@
 use crate::types::{DataKey, Error};
-use soroban_sdk::{Address, Env};
+use soroban_sdk::{Address, Env, Symbol};
 
 pub struct AdminModule;
 
@@ -11,13 +11,32 @@ impl AdminModule {
             return Err(Error::AlreadyInitialized);
         }
         
+        // Require authorization from the admin
+        admin.require_auth();
+        
         // Store admin address
         env.storage().instance().set(&DataKey::Admin, admin);
         
         // Initialize default settings
-        env.storage().instance().set(&DataKey::PointsExpiryDays, &365u64); // 1 year
-        env.storage().instance().set(&DataKey::MaxRedemptionPercentage, &5000u32); // 50%
-        env.storage().instance().set(&DataKey::PointsPerPurchaseRatio, &100u32); // 1 point per 100 units
+        let default_expiry_days = 365u64; // 1 year
+        let default_max_redemption = 5000u32; // 50%
+        let default_points_ratio = 100u32; // 1 point per 100 units
+        
+        env.storage().instance().set(&DataKey::PointsExpiryDays, &default_expiry_days);
+        env.storage().instance().set(&DataKey::MaxRedemptionPercentage, &default_max_redemption);
+        env.storage().instance().set(&DataKey::PointsPerPurchaseRatio, &default_points_ratio);
+        
+        // Publish contract initialization event
+        env.events().publish(
+            (Symbol::new(env, "contract_initialized"),),
+            ((
+                admin,
+                default_expiry_days,
+                default_max_redemption,
+                default_points_ratio,
+                env.ledger().timestamp(),
+            ),),
+        );
         
         Ok(())
     }

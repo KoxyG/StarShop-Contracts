@@ -74,6 +74,7 @@ impl RewardManager {
         }
         
         // Handle maximum redemption percentage for discounts
+        let mut discount_value: Option<i128> = None;
         if let RewardType::Discount(discount_bps) = reward.reward_type {
             if let Some(amount) = purchase_amount {
                 let max_redemption_bps = env
@@ -83,16 +84,26 @@ impl RewardManager {
                     .unwrap_or(5000); // Default to 50% if not set
                 
                 // Calculate discount value
-                let discount_value = (amount * discount_bps as i128) / 10000;
+                let calc_discount = (amount * discount_bps as i128) / 10000;
                 
                 // Check if discount exceeds maximum allowed
                 let max_allowed_discount = (amount * max_redemption_bps as i128) / 10000;
                 
-                if discount_value > max_allowed_discount {
+                if calc_discount > max_allowed_discount {
                     return Err(Error::MaxRedemptionExceeded);
                 }
+                
+                discount_value = Some(calc_discount);
             }
         }
+        
+        // Create reward claim data for event
+        let claim_data = (
+            reward.id,
+            reward.name.clone(),
+            reward.points_cost,
+            env.ledger().timestamp(),
+        );
         
         // Process the reward based on type
         match reward.reward_type {
@@ -104,8 +115,14 @@ impl RewardManager {
                     reward.points_cost,
                     Symbol::new(env, "discount_reward"),
                 )?;
+                
+                // Publish discount reward event with discount value
+                env.events().publish(
+                    (Symbol::new(env, "reward_claimed"), user.clone()),
+                    ((claim_data, "discount", discount_value),),
+                );
             }
-            RewardType::Product(_product_id) => {
+            RewardType::Product(product_id) => {
                 // Product reward, deduct points
                 PointsManager::spend_points(
                     env,
@@ -114,10 +131,16 @@ impl RewardManager {
                     Symbol::new(env, "product_reward"),
                 )?;
                 
+                // Publish product reward event
+                env.events().publish(
+                    (Symbol::new(env, "reward_claimed"), user.clone()),
+                    ((claim_data, "product", product_id),),
+                );
+                
                 // In a real implementation, you would integrate with inventory system
                 // to mark the product as redeemed for the user
             }
-            RewardType::XLM(_amount) => {
+            RewardType::XLM(amount) => {
                 // XLM reward, deduct points and transfer XLM
                 PointsManager::spend_points(
                     env,
@@ -125,6 +148,12 @@ impl RewardManager {
                     reward.points_cost,
                     Symbol::new(env, "xlm_reward"),
                 )?;
+                
+                // Publish XLM reward event
+                env.events().publish(
+                    (Symbol::new(env, "reward_claimed"), user.clone()),
+                    ((claim_data, "xlm", amount),),
+                );
                 
                 // Transfer XLM to user
                 // This would require integration with Stellar's native asset
@@ -142,6 +171,12 @@ impl RewardManager {
                 // Transfer tokens to user
                 let token = TokenClient::new(env, &token_address);
                 token.transfer(&env.current_contract_address(), user, &amount);
+                
+                // Publish token reward event
+                env.events().publish(
+                    (Symbol::new(env, "reward_claimed"), user.clone()),
+                    ((claim_data, "token", (token_address, amount)),),
+                );
             }
         }
         

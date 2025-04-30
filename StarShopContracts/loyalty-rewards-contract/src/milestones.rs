@@ -93,12 +93,15 @@ impl MilestoneManager {
         // Get milestone
         let milestone = Self::get_milestone(env, milestone_id)?;
         
+        // Clone the name for later use in the event
+        let milestone_name = milestone.name.clone();
+        
         // Award points
         PointsManager::add_points(
             env,
             user,
             milestone.points_reward,
-            milestone.name,
+            milestone_name.clone(),
             TransactionType::Bonus,
         )?;
         
@@ -110,6 +113,12 @@ impl MilestoneManager {
         env.storage()
             .persistent()
             .set(&DataKey::User(user.clone()), &user_data);
+        
+        // Publish milestone completion event
+        env.events().publish(
+            (Symbol::new(env, "milestone_completed"), user.clone()),
+            ((milestone_id, milestone_name, milestone.points_reward, env.ledger().timestamp()),),
+        );
         
         Ok(milestone.points_reward)
     }

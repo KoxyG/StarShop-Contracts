@@ -60,7 +60,7 @@ impl PointsManager {
         };
         
         // Update user data
-        user_data.transactions.push_back(transaction);
+        user_data.transactions.push_back(transaction.clone());
         user_data.current_points += amount;
         
         // Only update lifetime points for earned or bonus points
@@ -70,6 +70,12 @@ impl PointsManager {
         
         // Save updated user data
         env.storage().persistent().set(&DataKey::User(user.clone()), &user_data);
+        
+        // Publish event for points added
+        env.events().publish(
+            (Symbol::new(env, "points_added"), user.clone()),
+            (transaction, ),
+        );
         
         Ok(())
     }
@@ -103,11 +109,17 @@ impl PointsManager {
         };
         
         // Update user data
-        user_data.transactions.push_back(transaction);
+        user_data.transactions.push_back(transaction.clone());
         user_data.current_points -= amount;
         
         // Save updated user data
         env.storage().persistent().set(&DataKey::User(user.clone()), &user_data);
+        
+        // Publish event for points spent
+        env.events().publish(
+            (Symbol::new(env, "points_spent"), user.clone()),
+            (transaction, ),
+        );
         
         Ok(())
     }
@@ -251,5 +263,40 @@ impl PointsManager {
             .persistent()
             .get(&DataKey::User(user.clone()))
             .ok_or(Error::UserNotFound)
+    }
+    
+    /// Change user's loyalty level
+    pub fn change_level(
+        env: &Env,
+        user: &Address,
+        new_level: crate::types::LoyaltyLevel,
+    ) -> Result<(), Error> {
+        let mut user_data = Self::get_user_data(env, user)?;
+        
+        // Don't update if level is the same
+        if user_data.level == new_level {
+            return Ok(());
+        }
+        
+        // Record previous level for the event
+        let previous_level = user_data.level;
+        
+        // Clone new_level before moving it
+        let new_level_clone = new_level.clone();
+        
+        // Update level and timestamp
+        user_data.level = new_level;
+        user_data.level_updated_at = env.ledger().timestamp();
+        
+        // Save updated user data
+        env.storage().persistent().set(&DataKey::User(user.clone()), &user_data);
+        
+        // Publish event for level change
+        env.events().publish(
+            (Symbol::new(env, "level_changed"), user.clone()),
+            ((previous_level, new_level_clone),),
+        );
+        
+        Ok(())
     }
 }
