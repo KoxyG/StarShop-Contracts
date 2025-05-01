@@ -34,7 +34,7 @@ pub fn create_plan(
 ) {
     // Reading from storage
     let stored_admin: Address = env.storage().instance().get(&DataKey::Admin).unwrap();
-    
+
     assert_eq!(stored_admin, admin, "only admin can create plans");
 
     // Validate input

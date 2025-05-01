@@ -1,7 +1,7 @@
 use soroban_sdk::{contracttype, Address, Env, String, Symbol, Vec};
 
 use crate::minting::{is_active, is_in_grace_period};
-use crate::plans::{Plan, DataKey as PlanKey};
+use crate::plans::{DataKey as PlanKey, Plan};
 
 /// Storage key for tracking admin/manager roles
 #[contracttype]
@@ -14,7 +14,7 @@ pub enum RoleKey {
 
 /// Internal: Check access by role
 fn require_role(env: &Env, role_key: RoleKey, user: &Address) {
-    let allowed: Vec<Address> = env.storage().instance().get(&role_key)        .unwrap_or_else(|| {
+    let allowed: Vec<Address> = env.storage().instance().get(&role_key).unwrap_or_else(|| {
         // Create an empty vector
         Vec::new(&env)
     });
@@ -27,11 +27,11 @@ fn require_role(env: &Env, role_key: RoleKey, user: &Address) {
 pub fn add_role(env: &Env, role: Symbol, user: Address) {
     let admin_sym = Symbol::new(env, "admin");
     let manager_sym = Symbol::new(env, "manager");
-    
+
     let key = match role {
         sym if sym == admin_sym => RoleKey::Admin,
         sym if sym == manager_sym => RoleKey::Manager,
-        _ => panic!("Invalid role: unauthorized access")
+        _ => panic!("Invalid role: unauthorized access"),
     };
 
     let mut current: Vec<Address> = env.storage().instance().get(&key).unwrap_or_else(|| {

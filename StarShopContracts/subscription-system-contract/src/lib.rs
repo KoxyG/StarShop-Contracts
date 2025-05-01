@@ -1,26 +1,20 @@
 #![no_std]
 
-use soroban_sdk::{contract, contractimpl, Address, Bytes, Env, Symbol, String};
+use soroban_sdk::{contract, contractimpl, Address, Bytes, Env, String, Symbol};
 
-mod plans;
-mod minting;
-mod expiration;
 mod access;
+mod expiration;
+mod minting;
+mod plans;
 
-use crate::plans::{
-    create_plan, get_plan, update_plan, disable_plan, Plan,
-};
-use crate::minting::{mint_subscription, renew_subscription, is_active, is_expired};
-use crate::expiration::{
-    is_in_grace_period, cleanup_expired, get_subscription_state, SubscriptionState,
-};
 use crate::access::{
-    view_premium_content,
-    access_gold_feature,
-    admin_reset_subscription,
-    get_usage_count,
-    add_role,
+    access_gold_feature, add_role, admin_reset_subscription, get_usage_count, view_premium_content,
 };
+use crate::expiration::{
+    cleanup_expired, get_subscription_state, is_in_grace_period, SubscriptionState,
+};
+use crate::minting::{is_active, is_expired, mint_subscription, renew_subscription};
+use crate::plans::{create_plan, disable_plan, get_plan, update_plan, Plan};
 
 #[contract]
 pub struct SubscriptionContract;
@@ -43,15 +37,7 @@ impl SubscriptionContract {
         tier: Symbol,
     ) {
         create_plan(
-            &env,
-            admin,
-            plan_id,
-            name,
-            duration,
-            price,
-            benefits,
-            version,
-            tier,
+            &env, admin, plan_id, name, duration, price, benefits, version, tier,
         );
     }
 
@@ -67,15 +53,7 @@ impl SubscriptionContract {
         tier: Symbol,
     ) {
         update_plan(
-            &env,
-            admin,
-            plan_id,
-            name,
-            duration,
-            price,
-            benefits,
-            version,
-            tier,
+            &env, admin, plan_id, name, duration, price, benefits, version, tier,
         );
     }
 

@@ -1,6 +1,6 @@
 use soroban_sdk::{contracttype, Address, Env, Symbol, Vec};
 
-use crate::plans::{Plan, DataKey as PlanKey};
+use crate::plans::{DataKey as PlanKey, Plan};
 
 /// Represents a single NFT-based subscription owned by a user
 #[derive(Clone)]
@@ -13,17 +13,15 @@ pub struct SubscriptionNFT {
     pub version: u32,
 }
 
-
 /// Storage keys for minted subscriptions and user plan tracking
 #[contracttype]
 pub enum MintKey {
-    Subscription(Address, Symbol),   // (user, plan_id)
-    UserPlans(Address),              // Track all plans for a user
+    Subscription(Address, Symbol), // (user, plan_id)
+    UserPlans(Address),            // Track all plans for a user
 }
 
 /// Duration of the grace period in seconds (e.g., 3 days)
 const GRACE_PERIOD: u64 = 3 * 86400;
-
 
 /// Helper: Track which plans a user has subscribed to
 fn _track_user_plan(env: &Env, user: Address, plan_id: Symbol) {
@@ -38,7 +36,9 @@ fn _track_user_plan(env: &Env, user: Address, plan_id: Symbol) {
 
     if !plans.contains(&plan_id) {
         plans.push_back(plan_id.clone());
-        env.storage().instance().set(&MintKey::UserPlans(user), &plans);
+        env.storage()
+            .instance()
+            .set(&MintKey::UserPlans(user), &plans);
     }
 }
 
@@ -169,7 +169,10 @@ pub fn _admin_reset_subscription(env: &Env, admin: Address, user: Address, plan_
         version: plan.version,
     };
 
-    env.storage().instance().set(&MintKey::Subscription(user.clone(), plan_id.clone()), &subscription);
+    env.storage().instance().set(
+        &MintKey::Subscription(user.clone(), plan_id.clone()),
+        &subscription,
+    );
     _track_user_plan(env, user, plan_id); // ensure plan tracking
 }
 

@@ -1,6 +1,6 @@
-use soroban_sdk::{contracttype, Env, Address, Symbol};
+use soroban_sdk::{contracttype, Address, Env, Symbol};
 
-use crate::minting::{SubscriptionNFT, MintKey};
+use crate::minting::{MintKey, SubscriptionNFT};
 
 /// Grace period duration (e.g., 3 days in seconds)
 const GRACE_PERIOD_SECS: u64 = 3 * 24 * 60 * 60;
