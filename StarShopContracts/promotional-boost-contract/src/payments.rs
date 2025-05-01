@@ -45,7 +45,7 @@ impl PaymentProcessor {
         let base_price = 5_000_000i128; // 5 XLM in stroops (1 XLM = 1_000_000 stroops)
         let daily_rate = base_price; // per day rate
 
-        let days = (duration_secs as f64 / 86400.0).ceil() as i128;
+        let days = (duration_secs as f64 / 86400.0) as i128;
         days * daily_rate
     }
 }

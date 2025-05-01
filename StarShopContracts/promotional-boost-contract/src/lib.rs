@@ -26,6 +26,8 @@ impl PromotionBoostContract {
     ) {
         let now = env.ledger().timestamp();
 
+        let seller_address_clone = seller_address.clone();
+
         // 1. Calculate required price
         let required_price = PaymentProcessor::calculate_price(duration_secs);
         if payment_amount < required_price {
@@ -51,7 +53,13 @@ impl PromotionBoostContract {
             now,
         );
 
-        // 4. Refund the replaced seller if a slot was evicted
+        // 4. Emit event for slot added
+        env.events().publish(
+            (Symbol::new(&env, "boost_slot_added"), seller_address.clone()),
+            (slot_id, category.clone(), product_id, duration_secs, payment_amount),
+        );
+
+        // 5. Refund the replaced seller if a slot was evicted
         if let Some(replaced_slot_id) = slot_result {
             if let Some(replaced_slot) = slot_manager.get_slot(replaced_slot_id) {
                 PaymentProcessor::refund_payment(
@@ -60,13 +68,19 @@ impl PromotionBoostContract {
                     replaced_slot.price_paid.into(),
                 )
                 .expect("Refund failed");
+
+                // Emit event for replaced slot
+                env.events().publish(
+                    (Symbol::new(&env, "boost_slot_replaced"), replaced_slot.seller.clone()),
+                    (replaced_slot.product_id, replaced_slot.price_paid),
+                );
             }
         }
 
-        // 5. Save updated slot state
+        // 6. Save updated slot state
         slot_manager.save(&env);
 
-        // 6. Update visibility logic
+        // 7. Update visibility logic
         let mut visibility = VisibilityManager::load_or_default(&env);
         visibility.flag_product_as_boosted(
             product_id,
@@ -77,6 +91,12 @@ impl PromotionBoostContract {
         );
         visibility.remove_expired(now);
         visibility.save(&env);
+
+        // 8. Emit event for visibility change
+        env.events().publish(
+            (Symbol::new(&env, "visibility_boosted"), seller_address_clone),
+            (product_id, category),
+        );
     }
 
     /// View if a product is currently boosted
