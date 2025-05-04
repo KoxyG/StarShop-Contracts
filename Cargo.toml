@@ -2,15 +2,16 @@
 resolver = "2"
 members = [ 
     "StarShopContracts/airdrop-contract",
+    "StarShopContracts/crowdfunding-collective",
     "StarShopContracts/example-contract",
+    "StarShopContracts/governance-system-contract",
     "StarShopContracts/implement-nft-contract",
     "StarShopContracts/implement-payment-contract",
+    "StarShopContracts/loyalty-rewards-contract",
+    "StarShopContracts/multi-auction-contract",
     "StarShopContracts/product-follow-contract",
     "StarShopContracts/product-voting-contract",
     "StarShopContracts/referral-contract",
-    "StarShopContracts/loyalty-rewards-contract",
-    "StarShopContracts/crowdfunding-collective",
-    "StarShopContracts/multi-auction-contract",
 ]
 
 [workspace.dependencies]
