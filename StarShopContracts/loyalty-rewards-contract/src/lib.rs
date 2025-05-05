@@ -6,8 +6,8 @@ pub mod levels;
 pub mod milestones;
 pub mod points;
 pub mod rewards;
-pub mod types;
 mod test;
+pub mod types;
 
 use admin::AdminModule;
 use levels::LevelManager;
