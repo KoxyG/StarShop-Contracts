@@ -62,7 +62,7 @@ impl ExecutionEngine {
                 let mut moderators: Vec<Address> = env
                     .storage()
                     .instance()
-                    .get(&crate::types::MODERATOR_KEY)
+                    .get(&MODERATOR_KEY)
                     .unwrap_or(vec![env]);
                 if moderators.contains(addr) {
                     return Err(Error::AlreadyModerator);
@@ -76,7 +76,7 @@ impl ExecutionEngine {
                 let moderators: Vec<Address> = env
                     .storage()
                     .instance()
-                    .get(&crate::types::MODERATOR_KEY)
+                    .get(&MODERATOR_KEY)
                     .unwrap_or(vec![env]);
                 if !moderators.contains(addr) {
                     return Err(Error::ModeratorNotFound);

@@ -1,6 +1,6 @@
 use crate::execution::ExecutionEngine;
 use crate::proposals::ProposalManager;
-use crate::types::{Action, Error, Proposal, ProposalStatus, ProposalType, VotingConfig};
+use crate::types::{Action, Error, Proposal, ProposalStatus, ProposalType, VotingConfig, ADMIN_KEY, AUCTION_KEY, REFERRAL_KEY, TOKEN_KEY};
 use crate::voting::VotingSystem;
 use crate::weights::WeightCalculator;
 use soroban_sdk::{contract, contractimpl, symbol_short, Address, Env, String, Symbol, Vec};
@@ -18,19 +18,28 @@ impl GovernanceContract {
         auction_contract: Address,
         config: VotingConfig,
     ) -> Result<(), Error> {
+         // Prevent re-initialization
+         if env.storage().instance().has(&ADMIN_KEY) {
+            return Err(Error::AlreadyInitialized);
+        }
+
+        // Check if the admin is a valid address
         admin.require_auth();
+
         env.storage()
             .instance()
-            .set(&crate::types::TOKEN_KEY, &token);
+            .set(&ADMIN_KEY, &admin);
         env.storage()
             .instance()
-            .set(&crate::types::REFERRAL_KEY, &referral_contract);
+            .set(&TOKEN_KEY, &token);
         env.storage()
             .instance()
-            .set(&crate::types::AUCTION_KEY, &auction_contract);
-        
-        ProposalManager::init(&env, &admin, config);
-        WeightCalculator::init(&env, &token);
+            .set(&REFERRAL_KEY, &referral_contract);
+        env.storage()
+            .instance()
+            .set(&AUCTION_KEY, &auction_contract);
+
+        ProposalManager::init(&env, &config);
 
         env.events().publish(
             (symbol_short!("govern"), symbol_short!("init")),

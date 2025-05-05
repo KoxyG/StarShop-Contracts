@@ -3,17 +3,14 @@ use crate::types::{
     VotingConfig, ADMIN_KEY, DEFAULT_CONFIG_KEY, MODERATOR_KEY, PROPOSAL_COUNTER_KEY, REFERRAL_KEY,
     REQUIREMENTS_KEY, TOKEN_KEY,
 };
-use soroban_sdk::{symbol_short, token, vec, Address, Env, String, Symbol, Vec, Val};
+use soroban_sdk::{symbol_short, token, vec, Address, Env, String, Symbol, Val, Vec};
 
 pub struct ProposalManager;
 
 impl ProposalManager {
-    pub fn init(env: &Env, admin: &Address, config: VotingConfig) {
-        if env.storage().instance().has(&ADMIN_KEY) {
-            panic!("Already initialized");
-        }
-        env.storage().instance().set(&ADMIN_KEY, admin);
+    pub fn init(env: &Env, config: &VotingConfig) {
         env.storage().instance().set(&PROPOSAL_COUNTER_KEY, &0u32);
+
         let requirements = ProposalRequirements {
             cooldown_period: 86400,
             required_stake: 1000,
@@ -23,10 +20,12 @@ impl ProposalManager {
         env.storage()
             .instance()
             .set(&REQUIREMENTS_KEY, &requirements);
-        env.storage().instance().set(&DEFAULT_CONFIG_KEY, &config);
+        env.storage().instance().set(&DEFAULT_CONFIG_KEY, config);
         for status in 0..7 {
             let status_key = Self::get_status_key(env, ProposalStatus::from_u32(status));
-            env.storage().instance().set::<Symbol, Vec<u32>>(&status_key, &vec![env]);
+            env.storage()
+                .instance()
+                .set::<Symbol, Vec<u32>>(&status_key, &vec![env]);
         }
     }
 
@@ -62,7 +61,8 @@ impl ProposalManager {
         // Check referral level for economic changes
         if matches!(proposal_type, ProposalType::EconomicChange) {
             let args = vec![&env, proposer.to_val()];
-            let result: Val = env.invoke_contract(&referral, &Symbol::new(&env, "get_user_level"), args);
+            let result: Val =
+                env.invoke_contract(&referral, &Symbol::new(&env, "get_user_level"), args);
             let user_level: UserLevel = env
                 .storage()
                 .instance()
@@ -75,7 +75,8 @@ impl ProposalManager {
 
         // Check KYC/verification
         let args = vec![&env, proposer.to_val()];
-        let result: Val = env.invoke_contract(&referral, &Symbol::new(&env, "is_user_verified"), args);
+        let result: Val =
+            env.invoke_contract(&referral, &Symbol::new(&env, "is_user_verified"), args);
         let is_verified: bool = env.storage().instance().get(&result).unwrap_or(false);
         if !is_verified {
             return Err(Error::NotVerified);
@@ -158,7 +159,7 @@ impl ProposalManager {
         // Lock stake
         let requirements: ProposalRequirements =
             env.storage().instance().get(&REQUIREMENTS_KEY).unwrap();
-         let token_address = env
+        let token_address = env
             .storage()
             .instance()
             .get(&TOKEN_KEY)
@@ -270,7 +271,11 @@ impl ProposalManager {
             .ok_or(Error::NotInitialized)?;
         let token_client = token::TokenClient::new(env, &token_address);
         let contract_addr = env.current_contract_address();
-        token_client.transfer(&contract_addr, &proposal.proposer, &requirements.required_stake);
+        token_client.transfer(
+            &contract_addr,
+            &proposal.proposer,
+            &requirements.required_stake,
+        );
         proposal.status = ProposalStatus::Canceled;
         env.storage().instance().set(&key, &proposal);
         Self::remove_from_status_list(env, proposal_id, old_status);
@@ -350,7 +355,11 @@ impl ProposalManager {
         let token_client = token::TokenClient::new(env, &token_address);
         // Refund the stake to the proposer
         let contract_addr: Address = env.current_contract_address();
-        token_client.transfer(&contract_addr, &proposal.proposer, &requirements.required_stake);
+        token_client.transfer(
+            &contract_addr,
+            &proposal.proposer,
+            &requirements.required_stake,
+        );
         proposal.status = ProposalStatus::Rejected;
         env.storage().instance().set(&key, &proposal);
         Self::remove_from_status_list(env, proposal_id, ProposalStatus::Active);
@@ -377,7 +386,11 @@ impl ProposalManager {
         let token_address: Address = env.storage().instance().get(&TOKEN_KEY).unwrap();
         let token_client = token::TokenClient::new(env, &token_address);
         let contract_addr: Address = env.current_contract_address();
-        token_client.transfer(&contract_addr, &proposal.proposer, &requirements.required_stake);
+        token_client.transfer(
+            &contract_addr,
+            &proposal.proposer,
+            &requirements.required_stake,
+        );
         proposal.status = ProposalStatus::Executed;
         env.storage().instance().set(&key, &proposal);
         Self::remove_from_status_list(env, proposal_id, ProposalStatus::Passed);

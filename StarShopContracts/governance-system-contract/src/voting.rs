@@ -1,6 +1,6 @@
 use crate::proposals::ProposalManager;
 use crate::types::{Error, ProposalType, UserLevel, Vote, VotingConfig, REFERRAL_KEY};
-use soroban_sdk::{symbol_short, vec, Address, Env, IntoVal, Symbol, Vec, Val};
+use soroban_sdk::{symbol_short, vec, Address, Env, IntoVal, Symbol, Val, Vec};
 
 pub struct VotingSystem;
 
@@ -33,7 +33,8 @@ impl VotingSystem {
         // Check referral level for economic changes
         if matches!(proposal.proposal_type, ProposalType::EconomicChange) {
             let args = vec![&env, voter.to_val()];
-            let result: Val = env.invoke_contract(&referral, &Symbol::new(&env, "get_user_level"), args);
+            let result: Val =
+                env.invoke_contract(&referral, &Symbol::new(&env, "get_user_level"), args);
             let user_level: UserLevel = env
                 .storage()
                 .instance()
@@ -93,7 +94,7 @@ impl VotingSystem {
         proposal_id: u32,
         config: &VotingConfig,
     ) -> Result<bool, Error> {
-        let proposal = crate::proposals::ProposalManager::get_proposal(env, proposal_id)?;
+        let proposal = ProposalManager::get_proposal(env, proposal_id)?;
         if proposal.activated_at == 0 {
             return Ok(false);
         }
@@ -184,7 +185,8 @@ impl VotingSystem {
             .get(&REFERRAL_KEY)
             .ok_or(Error::NotInitialized)?;
         let args = vec![&env];
-        let result: Val = env.invoke_contract(&referral, &Symbol::new(&env, "get_total_users"), args);
+        let result: Val =
+            env.invoke_contract(&referral, &Symbol::new(&env, "get_total_users"), args);
         let total_users: u32 = env.storage().instance().get(&result).unwrap_or(0);
         Ok(total_users as u128)
     }

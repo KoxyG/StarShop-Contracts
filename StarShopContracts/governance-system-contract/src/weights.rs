@@ -1,13 +1,9 @@
-use crate::types::{Error, WeightSnapshot, REFERRAL_KEY, TOKEN_KEY};
-use soroban_sdk::{symbol_short, token, vec, Address, Env, Symbol, Vec, Val};
+use crate::types::{Error, ProposalRequirements, WeightSnapshot, REFERRAL_KEY, REQUIREMENTS_KEY, TOKEN_KEY};
+use soroban_sdk::{symbol_short, token, vec, Address, Env, Symbol, Val, Vec};
 
 pub struct WeightCalculator;
 
 impl WeightCalculator {
-    pub fn init(env: &Env, token: &Address) {
-        env.storage().instance().set(&TOKEN_KEY, token);
-    }
-
     pub fn take_snapshot(env: &Env, proposal_id: u32) -> Result<(), Error> {
         let referral: Address = env
             .storage()
@@ -21,7 +17,8 @@ impl WeightCalculator {
         let key = Self::get_snapshot_key(env, proposal_id);
         env.storage().instance().set(&key, &snapshot);
         let args = vec![&env];
-        let result: Val = env.invoke_contract(&referral, &Symbol::new(env, "get_total_users"), args);
+        let result: Val =
+            env.invoke_contract(&referral, &Symbol::new(env, "get_total_users"), args);
         let total_users: u32 = env.storage().instance().get(&result).unwrap_or(0);
         let mut total_power = 0i128;
         // Placeholder: Need user registry
@@ -44,10 +41,10 @@ impl WeightCalculator {
         if let Some(_delegatee) = Self::get_delegation(env, voter) {
             return Ok(0);
         }
-        let requirements: crate::types::ProposalRequirements = env
+        let requirements: ProposalRequirements = env
             .storage()
             .instance()
-            .get(&crate::types::REQUIREMENTS_KEY)
+            .get(&REQUIREMENTS_KEY)
             .unwrap();
         let base_weight = Self::get_base_weight(env, voter);
         let delegated_weight = Self::get_delegated_weight(env, voter, proposal_id);
