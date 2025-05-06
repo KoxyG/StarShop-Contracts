@@ -72,24 +72,7 @@ fn test_initialization() {
         );
     });
 
-    // let events = env.events().all();
-    // log!(&env, "Captured events: {:?}", events);
-    // assert_eq!(events.len(), 1, "Expected one initialization event");
-    // assert_eq!(
-    //     events.get_unchecked(0),
-    //     (
-    //         contract_id.clone(),
-    //         (symbol_short!("govern"), symbol_short!("init")).into_val(&env),
-    //         (
-    //             admin.clone(),
-    //             token.clone(),
-    //             referral.clone(),
-    //             auction.clone()
-    //         )
-    //             .into_val(&env)
-    //     ),
-    //     "Initialization event mismatch"
-    // );
+    
 }
 
 #[test]
