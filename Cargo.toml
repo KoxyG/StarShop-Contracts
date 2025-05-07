@@ -8,6 +8,7 @@ members = [
     "StarShopContracts/product-follow-contract",
     "StarShopContracts/product-voting-contract",
     "StarShopContracts/referral-contract",
+    "StarShopContracts/promotional-boost-contract",
     "StarShopContracts/loyalty-rewards-contract",
     "StarShopContracts/crowdfunding-collective",
     "StarShopContracts/multi-auction-contract",
