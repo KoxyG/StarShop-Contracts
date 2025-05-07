@@ -1,4 +1,4 @@
-use soroban_sdk::{contracttype, Address, Env, String, Symbol, Vec};
+use soroban_sdk::{contracttype, symbol_short, Address, Env, String, Symbol, Vec};
 
 use crate::minting::{is_active, is_in_grace_period};
 use crate::plans::{DataKey as PlanKey, Plan};
@@ -71,15 +71,15 @@ fn require_plan(env: &Env, user: &Address, plan_id: &Symbol, required_tier: Symb
 /// Example 1: Gated content (any valid subscription)
 pub fn view_premium_content(env: &Env, user: Address, plan_id: Symbol) -> String {
     require_subscription(env, &user, &plan_id);
-    track_usage(env, &user, Symbol::short("view_premium_content"));
+    track_usage(env, &user, symbol_short!("premium"));
     String::from_str(&env, "🎉 Welcome to premium content!")
 }
 
 /// Example 2: Tier-gated access (e.g., only 'gold' tier users)
 pub fn access_gold_feature(env: &Env, user: Address, plan_id: Symbol) -> Symbol {
-    require_plan(env, &user, &plan_id, Symbol::short("gold"));
-    track_usage(env, &user, Symbol::short("access_gold_feature"));
-    Symbol::short("GOLD_GRANTED")
+    require_plan(env, &user, &plan_id, symbol_short!("gold"));
+    track_usage(env, &user, symbol_short!("gold_feat"));
+    symbol_short!("GOLD")
 }
 
 /// Example 3: Admin-only reset logic
