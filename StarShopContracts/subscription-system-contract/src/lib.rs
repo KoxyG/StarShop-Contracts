@@ -1,6 +1,6 @@
 #![no_std]
 
-use soroban_sdk::{contract, contractimpl, Address, Bytes, Env, Symbol, String};
+use soroban_sdk::{contract, contractimpl, symbol_short, Address, Bytes, Env, String, Symbol};
 
 mod plans;
 mod minting;
@@ -57,7 +57,7 @@ impl SubscriptionContract {
         );
 
         env.events().publish(
-            (Symbol::short("CREATE_PLAN"), &admin_address, &plan_id_clone),
+            (symbol_short!("CREATE"), &admin_address, &plan_id_clone),
             (),
         );
     }
@@ -87,7 +87,7 @@ impl SubscriptionContract {
             tier,
         );
         env.events().publish(
-            (Symbol::short("UPDATE_PLAN"), &admin_clone, &plan_id_clone),
+            (symbol_short!("UPDATE"), &admin_clone, &plan_id_clone),
             (),
         );
     }
@@ -97,7 +97,7 @@ impl SubscriptionContract {
             let plan_id_clone = plan_id.clone();
             disable_plan(&env, admin, plan_id);
             env.events().publish(
-                (Symbol::short("DISABLE_PLAN"), &admin_clone, &plan_id_clone),
+                (symbol_short!("DISABLE"), &admin_clone, &plan_id_clone),
                 (),
             );
         }
@@ -115,7 +115,7 @@ impl SubscriptionContract {
         let plan_id_clone = plan_id.clone();
         mint_subscription(&env, user, plan_id);
         env.events().publish(
-            (Symbol::short("SUBSCRIBE"), &user_clone, &plan_id_clone),
+            (symbol_short!("SUBSCRIBE"), &user_clone, &plan_id_clone),
             (),
         );
     }
@@ -125,7 +125,7 @@ impl SubscriptionContract {
         let plan_id_clone = plan_id.clone();
         renew_subscription(&env, user, plan_id);
         env.events().publish(
-            (Symbol::short("RENEW"), &user_clone, &plan_id_clone),
+            (symbol_short!("RENEW"), &user_clone, &plan_id_clone),
             (),
         );
     }
@@ -169,7 +169,7 @@ impl SubscriptionContract {
     pub fn add_user_role(env: Env, role: Symbol, user: Address) {
         add_role(&env, role.clone(), user.clone());
         env.events().publish(
-            (Symbol::short("ADD_ROLE"), &role, &user),
+            (symbol_short!("ADD_ROLE"), &role, &user),
             (),
         );
     }
@@ -177,7 +177,7 @@ impl SubscriptionContract {
     pub fn reset_subscription(env: Env, admin: Address, target_user: Address, plan_id: Symbol) {
         admin_reset_subscription(&env, admin.clone(), target_user.clone(), plan_id.clone());
         env.events().publish(
-            (Symbol::short("RESET_SUB"), &admin, &target_user, &plan_id),
+            (symbol_short!("RESET_SUB"), &admin, &target_user, &plan_id),
             (),
         );
     }
@@ -193,10 +193,9 @@ impl SubscriptionContract {
     pub fn cleanup(env: Env, user: Address, plan_id: Symbol) -> bool {
         let res = cleanup_expired(&env, user.clone(), plan_id.clone());
         env.events().publish(
-            (Symbol::short("CLEANUP"), &user, &plan_id),
+            (symbol_short!("CLEANUP"), &user, &plan_id),
             (),
         );
         res
     }
 }
-
