@@ -1,6 +1,9 @@
 use crate::execution::ExecutionEngine;
 use crate::proposals::ProposalManager;
-use crate::types::{Action, Error, Proposal, ProposalStatus, ProposalType, VotingConfig, ADMIN_KEY, AUCTION_KEY, REFERRAL_KEY, TOKEN_KEY};
+use crate::types::{
+    Action, Error, Proposal, ProposalStatus, ProposalType, VotingConfig, ADMIN_KEY, AUCTION_KEY,
+    REFERRAL_KEY, TOKEN_KEY,
+};
 use crate::voting::VotingSystem;
 use crate::weights::WeightCalculator;
 use soroban_sdk::{contract, contractimpl, symbol_short, Address, Env, String, Symbol, Vec};
@@ -18,20 +21,16 @@ impl GovernanceContract {
         auction_contract: Address,
         config: VotingConfig,
     ) -> Result<(), Error> {
-         // Prevent re-initialization
-         if env.storage().instance().has(&ADMIN_KEY) {
+        // Prevent re-initialization
+        if env.storage().instance().has(&ADMIN_KEY) {
             return Err(Error::AlreadyInitialized);
         }
 
         // Check if the admin is a valid address
         admin.require_auth();
 
-        env.storage()
-            .instance()
-            .set(&ADMIN_KEY, &admin);
-        env.storage()
-            .instance()
-            .set(&TOKEN_KEY, &token);
+        env.storage().instance().set(&ADMIN_KEY, &admin);
+        env.storage().instance().set(&TOKEN_KEY, &token);
         env.storage()
             .instance()
             .set(&REFERRAL_KEY, &referral_contract);
@@ -59,10 +58,6 @@ impl GovernanceContract {
         actions: Vec<Action>,
         voting_config: VotingConfig,
     ) -> Result<u32, Error> {
-        proposer.require_auth();
-        if !ProposalManager::check_proposer_eligibility(&env, &proposer, &proposal_type)? {
-            return Err(Error::NotEligibleToPropose);
-        }
         ProposalManager::create_proposal(
             &env,
             &proposer,
@@ -76,17 +71,15 @@ impl GovernanceContract {
     }
 
     pub fn activate_proposal(env: Env, caller: Address, proposal_id: u32) -> Result<(), Error> {
-        caller.require_auth();
         let _proposal = ProposalManager::get_proposal(&env, proposal_id)?;
         if !ProposalManager::is_moderator(&env, &caller) {
             return Err(Error::Unauthorized);
         }
         WeightCalculator::take_snapshot(&env, proposal_id)?;
-        ProposalManager::activate_proposal(&env, proposal_id)
+        ProposalManager::activate_proposal(&env, caller, proposal_id)
     }
 
     pub fn cancel_proposal(env: Env, caller: Address, proposal_id: u32) -> Result<(), Error> {
-        caller.require_auth();
         let proposal = ProposalManager::get_proposal(&env, proposal_id)?;
         if proposal.proposer != caller
             && !ProposalManager::is_admin(&env, &caller)
@@ -97,12 +90,44 @@ impl GovernanceContract {
         if proposal.status != ProposalStatus::Draft && proposal.status != ProposalStatus::Active {
             return Err(Error::InvalidProposalStatus);
         }
-        ProposalManager::cancel_proposal(&env, proposal_id)
+        ProposalManager::cancel_proposal(&env, caller, proposal_id)
     }
 
     pub fn veto_proposal(env: Env, moderator: Address, proposal_id: u32) -> Result<(), Error> {
-        moderator.require_auth();
         ProposalManager::veto_proposal(&env, &moderator, proposal_id)
+    }
+
+    pub fn mark_passed(
+        env: Env,
+        caller: Address,
+        proposal_id: u32,
+    ) -> Result<(), Error> {
+        if !ProposalManager::is_moderator(&env, &caller) {
+            return Err(Error::Unauthorized);
+        }
+        ProposalManager::mark_passed(&env, proposal_id)
+    }
+
+    pub fn mark_rejected(
+        env: Env,
+        caller: Address,
+        proposal_id: u32,
+    ) -> Result<(), Error> {
+        if !ProposalManager::is_moderator(&env, &caller) {
+            return Err(Error::Unauthorized);
+        }
+        ProposalManager::mark_rejected(&env, proposal_id)
+    }
+
+    pub fn mark_executed(
+        env: Env,
+        caller: Address,
+        proposal_id: u32,
+    ) -> Result<(), Error> {
+        if !ProposalManager::is_moderator(&env, &caller) {
+            return Err(Error::Unauthorized);
+        }
+        ProposalManager::mark_executed(&env, proposal_id)
     }
 
     pub fn cast_vote(
@@ -111,7 +136,6 @@ impl GovernanceContract {
         proposal_id: u32,
         support: bool,
     ) -> Result<(), Error> {
-        voter.require_auth();
         let proposal = ProposalManager::get_proposal(&env, proposal_id)?;
         if proposal.status != ProposalStatus::Active {
             return Err(Error::ProposalNotActive);
@@ -137,7 +161,6 @@ impl GovernanceContract {
     }
 
     pub fn delegate_vote(env: Env, delegator: Address, delegatee: Address) -> Result<(), Error> {
-        delegator.require_auth();
         WeightCalculator::delegate(&env, &delegator, &delegatee)
     }
 
@@ -146,7 +169,6 @@ impl GovernanceContract {
     }
 
     pub fn execute_proposal(env: Env, executor: Address, proposal_id: u32) -> Result<(), Error> {
-        executor.require_auth();
         let proposal = ProposalManager::get_proposal(&env, proposal_id)?;
         if proposal.status != ProposalStatus::Passed {
             return Err(Error::ProposalNotExecutable);

@@ -1,4 +1,6 @@
-use crate::types::{Error, ProposalRequirements, WeightSnapshot, REFERRAL_KEY, REQUIREMENTS_KEY, TOKEN_KEY};
+use crate::types::{
+    Error, ProposalRequirements, WeightSnapshot, REFERRAL_KEY, REQUIREMENTS_KEY, TOKEN_KEY,
+};
 use soroban_sdk::{symbol_short, token, vec, Address, Env, Symbol, Val, Vec};
 
 pub struct WeightCalculator;
@@ -41,11 +43,8 @@ impl WeightCalculator {
         if let Some(_delegatee) = Self::get_delegation(env, voter) {
             return Ok(0);
         }
-        let requirements: ProposalRequirements = env
-            .storage()
-            .instance()
-            .get(&REQUIREMENTS_KEY)
-            .unwrap();
+        let requirements: ProposalRequirements =
+            env.storage().instance().get(&REQUIREMENTS_KEY).unwrap();
         let base_weight = Self::get_base_weight(env, voter);
         let delegated_weight = Self::get_delegated_weight(env, voter, proposal_id);
         let total_weight = base_weight + delegated_weight;
@@ -67,6 +66,7 @@ impl WeightCalculator {
     }
 
     pub fn delegate(env: &Env, delegator: &Address, delegatee: &Address) -> Result<(), Error> {
+        delegator.require_auth();
         if delegator == delegatee {
             return Err(Error::SelfDelegationNotAllowed);
         }

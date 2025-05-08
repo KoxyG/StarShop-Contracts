@@ -12,6 +12,7 @@ impl VotingSystem {
         support: bool,
         weight: i128,
     ) -> Result<(), Error> {
+        voter.require_auth();
         let proposal = ProposalManager::get_proposal(env, proposal_id)?;
         let referral: Address = env
             .storage()
