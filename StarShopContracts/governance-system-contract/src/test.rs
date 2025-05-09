@@ -3,17 +3,18 @@ use super::*;
 use governance::{GovernanceContract, GovernanceContractClient};
 use proposals::ProposalManager;
 use soroban_sdk::{
-    contract, contractimpl, log, map, symbol_short,
-    token::{StellarAssetClient as TokenAdmin, TokenClient},
+    contract, contractimpl, log, symbol_short,
     testutils::{Address as _, Events, Ledger, LedgerInfo},
-    vec, Address, Bytes, Env, IntoVal, Map, String, Symbol, Val, Vec,
+    token::{StellarAssetClient as TokenAdmin, TokenClient},
+    vec, Address, Env, IntoVal, Map, String, Symbol, Val, Vec,
 };
 use types::*;
+use voting::VotingSystem;
 
 // Test Constants
-const PROPOSAL_TITLE: &str = "Test Proposal";
-const PROPOSAL_DESC: &str = "Description";
-const METADATA_HASH: &str = "hash123";
+// const PROPOSAL_TITLE: &str = "TestProposal";
+// const PROPOSAL_DESC: &str = "Description";
+// const METADATA_HASH: &str = "hash123";
 const COOLDOWN_PERIOD: u64 = 86400;
 const REQUIRED_STAKE: i128 = 1000;
 const PROPOSAL_LIMIT: u32 = 5;
@@ -23,13 +24,75 @@ const QUORUM: u128 = 1000;
 const THRESHOLD: u128 = 5000;
 const EXECUTION_DELAY: u64 = 3600;
 
+fn create_test_contracts(
+    env: &Env,
+) -> (
+    Address,
+    Address,
+    Address,
+    GovernanceContractClient,
+    MockReferralClient,
+) {
+    let governance_id = env.register(GovernanceContract, ());
+    let referral_id = env.register(MockReferral, ());
+    let auction_id = env.register(MockAuction, ());
+    let governance_client = GovernanceContractClient::new(&env, &governance_id);
+    let referral_client = MockReferralClient::new(&env, &referral_id);
+
+    (
+        governance_id,
+        referral_id,
+        auction_id,
+        governance_client,
+        referral_client,
+    )
+}
+
+fn setup_governance_args(env: &Env) -> (Address, Address, VotingConfig) {
+    let admin = Address::generate(&env);
+    let proposer = Address::generate(&env);
+    let default_config = VotingConfig {
+        duration: VOTING_DURATION,
+        quorum: QUORUM,
+        threshold: THRESHOLD,
+        execution_delay: EXECUTION_DELAY,
+        one_address_one_vote: false,
+    };
+
+    (admin, proposer, default_config)
+}
+
+fn create_token_contracts<'a>(
+    env: &'a Env,
+    admin: &'a Address,
+) -> (Address, TokenAdmin<'a>, TokenClient<'a>) {
+    let stellar_asset = env.register_stellar_asset_contract_v2(admin.clone());
+    let token_id = stellar_asset.address();
+    let token_admin = TokenAdmin::new(&env, &token_id);
+    let token_client = TokenClient::new(&env, &token_id);
+    (token_id, token_admin, token_client)
+}
+
+fn setup_proposal_args(
+    env: &Env,
+    proposer: &Address,
+) -> (Symbol, Symbol, String, ProposalType, Vec<Action>) {
+    let title = symbol_short!("TestProp");
+    let description = symbol_short!("Descr");
+    let metadata_hash = String::from_str(&env, "hash123");
+    let proposal_type = ProposalType::EconomicChange; // Matches 5
+    let actions = vec![&env, Action::AppointModerator(proposer.clone())];
+
+    (title, description, metadata_hash, proposal_type, actions)
+}
+
 #[test]
 fn test_initialization() {
     let env = Env::default();
     env.mock_all_auths();
 
-    let contract_id = env.register(GovernanceContract, ());
-    let client = GovernanceContractClient::new(&env, &contract_id);
+    let governance_id = env.register(GovernanceContract, ());
+    let governance_client = GovernanceContractClient::new(&env, &governance_id);
 
     let admin = Address::generate(&env);
     let token = Address::generate(&env);
@@ -43,9 +106,9 @@ fn test_initialization() {
         one_address_one_vote: false,
     };
 
-    client.initialize(&admin, &token, &referral, &auction, &config);
+    governance_client.initialize(&admin, &token, &referral, &auction, &config);
 
-    env.as_contract(&contract_id, || {
+    env.as_contract(&governance_id, || {
         let stored_admin: Address = env.storage().instance().get(&ADMIN_KEY).unwrap();
         let stored_token: Address = env.storage().instance().get(&TOKEN_KEY).unwrap();
         let stored_referral: Address = env.storage().instance().get(&REFERRAL_KEY).unwrap();
@@ -72,7 +135,27 @@ fn test_initialization() {
         );
     });
 
-    
+    // let events = env.events().all();
+    // log!(&env, "Captured events: {:?}", events);
+    // assert_eq!(events.len(), 1, "Expected one initialization event");
+    // assert_eq!(
+    //     events,
+    //     vec![
+    //         &env,
+    //         (
+    //             governance_id.clone(),
+    //             (symbol_short!("govern"), symbol_short!("init")).into_val(&env),
+    //             (
+    //                 admin.clone(),
+    //                 token.clone(),
+    //                 referral.clone(),
+    //                 auction.clone()
+    //             )
+    //                 .into_val(&env)
+    //         ),
+    //     ],
+    //     "Initialization event mismatch"
+    // );
 }
 
 #[test]
@@ -80,8 +163,8 @@ fn test_initialize_already_initialized() {
     let env = Env::default();
     env.mock_all_auths();
 
-    let contract_id = env.register(GovernanceContract, ());
-    let client = GovernanceContractClient::new(&env, &contract_id);
+    let governance_id = env.register(GovernanceContract, ());
+    let governance_client = GovernanceContractClient::new(&env, &governance_id);
 
     let admin = Address::generate(&env);
     let token = Address::generate(&env);
@@ -95,8 +178,8 @@ fn test_initialize_already_initialized() {
         one_address_one_vote: false,
     };
 
-    client.initialize(&admin, &token, &referral, &auction, &config);
-    let result = client.try_initialize(&admin, &token, &referral, &auction, &config);
+    governance_client.initialize(&admin, &token, &referral, &auction, &config);
+    let result = governance_client.try_initialize(&admin, &token, &referral, &auction, &config);
     assert_eq!(
         result,
         Err(Ok(Error::AlreadyInitialized)),
@@ -109,14 +192,16 @@ fn test_create_proposal_success() {
     let env = Env::default();
     env.mock_all_auths();
 
-    let contract_id = env.register(GovernanceContract, ());
-    let client = GovernanceContractClient::new(&env, &contract_id);
+    // Register contracts
+    let governance_id = env.register(GovernanceContract, ());
+    let referral_id = env.register(MockReferral, ());
+    let auction_id = env.register(MockAuction, ());
+    let governance_client = GovernanceContractClient::new(&env, &governance_id);
+    let referral_client = MockReferralClient::new(&env, &referral_id);
 
+    // Setup
     let admin = Address::generate(&env);
     let proposer = Address::generate(&env);
-    let token_id = env.register(MockToken, ());
-    let referral_id = env.register(MockReferral, ());
-    let auction = Address::generate(&env);
     let config = VotingConfig {
         duration: VOTING_DURATION,
         quorum: QUORUM,
@@ -125,25 +210,95 @@ fn test_create_proposal_success() {
         one_address_one_vote: false,
     };
 
-    client.initialize(&admin, &token_id, &referral_id, &auction, &config);
-
-    let stellar_asset = env.register_stellar_asset_contract_v2(token_admin.clone());
-    let token_contract_id = stellar_asset.address();
-    let token = TokenAdmin::new(&env, &token_contract_id);
+    let stellar_asset = env.register_stellar_asset_contract_v2(admin.clone());
+    let token_id = stellar_asset.address();
+    let token_admin = TokenAdmin::new(&env, &token_id);
     let token_client = TokenClient::new(&env, &token_id);
 
-    token_client.set_balance(&proposer, &2000);
-    let referral_client = MockReferralClient::new(&env, &referral_id);
+    // Initialize governance contract
+    log!(&env, "Initializing governance contract");
+    let init_result =
+        governance_client.try_initialize(&admin, &token_id, &referral_id, &auction_id, &config);
+    assert!(
+        init_result.is_ok(),
+        "Initialization failed: {:?}",
+        init_result
+    );
+
+    // Set token balance and referral status
+    log!(&env, "Setting token balance and referral status");
+    token_admin.mint(&proposer, &2000);
+    // token_client.approve(&proposer, &governance_id, &2000, &1000);
     referral_client.set_user_verified(&proposer, &true);
     referral_client.set_user_level(&proposer, &UserLevel::Platinum);
 
-    let title = Symbol::new(&env, PROPOSAL_TITLE);
-    let description = Symbol::new(&env, PROPOSAL_DESC);
-    let metadata_hash = String::from_str(&env, METADATA_HASH);
-    let proposal_type = ProposalType::EconomicChange;
+    // Create proposal
+    log!(&env, "Creating proposal");
+    let title = symbol_short!("TestProp");
+    let description = symbol_short!("Descr");
+    let metadata_hash = String::from_str(&env, "hash123");
+    let proposal_type = ProposalType::EconomicChange; // Matches 5
     let actions = vec![&env, Action::AppointModerator(proposer.clone())];
 
-    let proposal_id = client.create_proposal(
+    let proposal_id_result = governance_client.try_create_proposal(
+        &proposer,
+        &title,
+        &description,
+        &metadata_hash,
+        &proposal_type,
+        &actions,
+        &config,
+    );
+    assert!(
+        proposal_id_result.is_ok(),
+        "Create proposal failed: {:?}",
+        proposal_id_result
+    );
+    let proposal_id = proposal_id_result
+        .expect("Failed to get proposal ID after successful creation")
+        .unwrap();
+
+    // Verify proposal
+    log!(&env, "verifying proposal");
+    let stored_proposal: Proposal = env.invoke_contract(
+        &governance_id,
+        &Symbol::new(&env, "get_proposal"),
+        vec![&env, proposal_id.into_val(&env)],
+    );
+    assert_eq!(stored_proposal.title, title);
+    assert_eq!(stored_proposal.description, description);
+    assert_eq!(stored_proposal.proposer, proposer);
+    assert_eq!(stored_proposal.metadata_hash, metadata_hash);
+    assert_eq!(stored_proposal.proposal_type, proposal_type);
+    assert_eq!(stored_proposal.actions, actions);
+    assert_eq!(stored_proposal.status, ProposalStatus::Draft);
+
+    // Verify token balance (stake locked)
+    assert_eq!(token_client.balance(&proposer), 1000); // 2000 - 1000 stake
+}
+
+#[test]
+fn test_create_proposal_insufficient_stake() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    // Setup test environment
+    let (_, referral_id, auction_id, governance_client, referral_client) =
+        create_test_contracts(&env);
+    let (admin, proposer, config) = setup_governance_args(&env);
+    let (token_id, token_admin, token_client) = create_token_contracts(&env, &admin);
+
+    governance_client.initialize(&admin, &token_id, &referral_id, &auction_id, &config);
+
+    // Set token balance and referral status
+    token_admin.mint(&proposer, &500);
+    referral_client.set_user_verified(&proposer, &true);
+    referral_client.set_user_level(&proposer, &UserLevel::Platinum);
+
+    // Create proposal
+    let (title, description, metadata_hash, proposal_type, actions) =
+        setup_proposal_args(&env, &proposer);
+    let result = governance_client.try_create_proposal(
         &proposer,
         &title,
         &description,
@@ -153,899 +308,740 @@ fn test_create_proposal_success() {
         &config,
     );
 
-    assert_eq!(proposal_id, 1, "Proposal ID should be 1");
+    assert_eq!(
+        result,
+        Err(Ok(Error::InsufficientStake)),
+        "Expected InsufficientStake error"
+    );
 
-    env.as_contract(&contract_id, || {
+    // Verify proposal not created
+    let balance = token_client.balance(&proposer);
+    assert_eq!(balance, 500, "Balance should not change");
+}
+
+#[test]
+fn test_create_proposal_not_verified() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    // Setup test environment
+    let (_, referral_id, auction_id, governance_client, referral_client) =
+        create_test_contracts(&env);
+    let (admin, proposer, config) = setup_governance_args(&env);
+    let (token_id, token_admin, _) = create_token_contracts(&env, &admin);
+
+    governance_client.initialize(&admin, &token_id, &referral_id, &auction_id, &config);
+
+    // Set token balance and referral status
+    token_admin.mint(&proposer, &1000);
+    referral_client.set_user_verified(&proposer, &false); // Not verified
+    referral_client.set_user_level(&proposer, &UserLevel::Platinum);
+
+    // Create proposal
+    let (title, description, metadata_hash, proposal_type, actions) =
+        setup_proposal_args(&env, &proposer);
+    let result = governance_client.try_create_proposal(
+        &proposer,
+        &title,
+        &description,
+        &metadata_hash,
+        &proposal_type,
+        &actions,
+        &config,
+    );
+
+    assert_eq!(
+        result,
+        Err(Ok(Error::NotVerified)),
+        "Expected NotVerified error"
+    );
+}
+
+#[test]
+fn test_create_proposal_proposal_limit_reached() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    // Setup test environment
+    let (_, referral_id, auction_id, governance_client, referral_client) =
+        create_test_contracts(&env);
+    let (admin, proposer, config) = setup_governance_args(&env);
+    let (token_id, token_admin, _) = create_token_contracts(&env, &admin);
+
+    governance_client.initialize(&admin, &token_id, &referral_id, &auction_id, &config);
+
+    // Set token balance and referral status
+    token_admin.mint(&proposer, &10000);
+    referral_client.set_user_verified(&proposer, &true);
+    referral_client.set_user_level(&proposer, &UserLevel::Platinum);
+
+    // Create proposal
+    let (title, description, metadata_hash, proposal_type, actions) =
+        setup_proposal_args(&env, &proposer);
+
+    // Create 5 proposals (reaching limit)
+    for _ in 1..=PROPOSAL_LIMIT {
+        governance_client.create_proposal(
+            &proposer,
+            &title,
+            &description,
+            &metadata_hash,
+            &proposal_type,
+            &actions,
+            &config,
+        );
+
+        env.ledger().with_mut(|li| {
+            li.timestamp += COOLDOWN_PERIOD + 1; // Advance past the cooldown period
+        });
+    }
+
+    // Try to create one more
+    let result = governance_client.try_create_proposal(
+        &proposer,
+        &title,
+        &description,
+        &metadata_hash,
+        &proposal_type,
+        &actions,
+        &config,
+    );
+
+    assert_eq!(
+        result,
+        Err(Ok(Error::ProposalLimitReached)),
+        "Expected ProposalLimitReached error"
+    );
+}
+
+#[test]
+fn test_create_proposal_in_cooldown() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    // Setup test environment
+    let (_, referral_id, auction_id, governance_client, referral_client) =
+        create_test_contracts(&env);
+    let (admin, proposer, config) = setup_governance_args(&env);
+    let (token_id, token_admin, _) = create_token_contracts(&env, &admin);
+
+    governance_client.initialize(&admin, &token_id, &referral_id, &auction_id, &config);
+
+    // Set token balance and referral status
+    token_admin.mint(&proposer, &5000);
+    referral_client.set_user_verified(&proposer, &true);
+    referral_client.set_user_level(&proposer, &UserLevel::Platinum);
+
+    // Create proposal
+    let (title, description, metadata_hash, proposal_type, actions) =
+        setup_proposal_args(&env, &proposer);
+
+    // Create first proposal
+    governance_client.create_proposal(
+        &proposer,
+        &title,
+        &description,
+        &metadata_hash,
+        &proposal_type,
+        &actions,
+        &config,
+    );
+
+    // Try to create another within cooldown
+    env.ledger().with_mut(|li| {
+        li.timestamp += COOLDOWN_PERIOD / 2; // Not enough time passed
+    });
+
+    let result = governance_client.try_create_proposal(
+        &proposer,
+        &title,
+        &description,
+        &metadata_hash,
+        &proposal_type,
+        &actions,
+        &config,
+    );
+
+    assert_eq!(
+        result,
+        Err(Ok(Error::ProposalInCooldown)),
+        "Expected ProposalInCooldown error"
+    );
+
+    // Try after cooldown
+    env.ledger().with_mut(|li| {
+        li.timestamp += COOLDOWN_PERIOD; // Past cooldown
+    });
+
+    let proposal_id = governance_client.create_proposal(
+        &proposer,
+        &title,
+        &description,
+        &metadata_hash,
+        &proposal_type,
+        &actions,
+        &config,
+    );
+    assert_eq!(proposal_id, 2, "Second proposal should succeed");
+}
+
+#[test]
+fn test_activate_proposal() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    // Setup test environment
+    let (governance_id, referral_id, auction_id, governance_client, referral_client) =
+        create_test_contracts(&env);
+    let (admin, proposer, config) = setup_governance_args(&env);
+    let (token_id, token_admin, _) = create_token_contracts(&env, &admin);
+    let moderator = Address::generate(&env);
+
+    governance_client.initialize(&admin, &token_id, &referral_id, &auction_id, &config);
+
+    // Set token balance and referral status
+    token_admin.mint(&proposer, &2000);
+    referral_client.set_user_verified(&proposer, &true);
+    referral_client.set_user_level(&proposer, &UserLevel::Platinum);
+
+    // Set moderator
+    env.as_contract(&governance_id, || {
+        let mut moderators: Vec<Address> = vec![&env];
+        moderators.push_back(moderator.clone());
+        env.storage().instance().set(&MODERATOR_KEY, &moderators);
+    });
+
+    let (title, description, metadata_hash, proposal_type, actions) =
+        setup_proposal_args(&env, &proposer);
+
+    let proposal_id = governance_client.create_proposal(
+        &proposer,
+        &title,
+        &description,
+        &metadata_hash,
+        &proposal_type,
+        &actions,
+        &config,
+    );
+
+    let proposal: Proposal = env.invoke_contract(
+        &governance_id,
+        &Symbol::new(&env, "get_proposal"),
+        vec![&env, proposal_id.into_val(&env)],
+    );
+    assert_eq!(proposal.status, ProposalStatus::Draft);
+
+    env.ledger().with_mut(|li| {
+        li.timestamp += COOLDOWN_PERIOD / 24;
+    });
+    governance_client.activate_proposal(&moderator, &proposal_id);
+
+    env.as_contract(&governance_id, || {
         let proposal = ProposalManager::get_proposal(&env, proposal_id).unwrap();
-        assert_eq!(proposal.proposer, proposer, "Proposer mismatch");
-        assert_eq!(proposal.title, title, "Title mismatch");
+        assert_eq!(
+            proposal.status,
+            ProposalStatus::Active,
+            "Status should be Active"
+        );
+        assert_ne!(proposal.activated_at, 0, "Activated_at should be set");
+    });
+}
+
+#[test]
+fn test_activate_proposal_no_moderators() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    // Setup test environment
+    let (_, referral_id, auction_id, governance_client, referral_client) =
+        create_test_contracts(&env);
+    let (admin, proposer, config) = setup_governance_args(&env);
+    let (token_id, token_admin, _) = create_token_contracts(&env, &admin);
+    let moderator = Address::generate(&env);
+
+    governance_client.initialize(&admin, &token_id, &referral_id, &auction_id, &config);
+
+    // Set token balance and referral status
+    token_admin.mint(&proposer, &2000);
+    referral_client.set_user_verified(&proposer, &true);
+    referral_client.set_user_level(&proposer, &UserLevel::Platinum);
+
+    let (title, description, metadata_hash, proposal_type, actions) =
+        setup_proposal_args(&env, &proposer);
+
+    let proposal_id = governance_client.create_proposal(
+        &proposer,
+        &title,
+        &description,
+        &metadata_hash,
+        &proposal_type,
+        &actions,
+        &config,
+    );
+
+    let result = governance_client.try_activate_proposal(&moderator, &proposal_id);
+    assert_eq!(
+        result,
+        Err(Ok(Error::Unauthorized)),
+        "Expected Unauthorized error"
+    );
+}
+
+#[test]
+fn test_cancel_proposal() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    // Setup test environment
+    let (governance_id, referral_id, auction_id, governance_client, referral_client) =
+        create_test_contracts(&env);
+    let (admin, proposer, config) = setup_governance_args(&env);
+    let (token_id, token_admin, token_client) = create_token_contracts(&env, &admin);
+    let moderator = Address::generate(&env);
+
+    governance_client.initialize(&admin, &token_id, &referral_id, &auction_id, &config);
+
+    // Set token balance and referral status
+    token_admin.mint(&proposer, &2000);
+    referral_client.set_user_verified(&proposer, &true);
+    referral_client.set_user_level(&proposer, &UserLevel::Platinum);
+
+    // Set moderator
+    env.as_contract(&governance_id, || {
+        let mut moderators: Vec<Address> = vec![&env];
+        moderators.push_back(moderator.clone());
+        env.storage().instance().set(&MODERATOR_KEY, &moderators);
+    });
+
+    let (title, description, metadata_hash, proposal_type, actions) =
+        setup_proposal_args(&env, &proposer);
+
+    let proposal_id = governance_client.create_proposal(
+        &proposer,
+        &title,
+        &description,
+        &metadata_hash,
+        &proposal_type,
+        &actions,
+        &config,
+    );
+
+    let balance = token_client.balance(&proposer);
+    assert_eq!(balance, 1000, "Stake should be deducted");
+
+    env.as_contract(&governance_id, || {
+        let proposal = ProposalManager::get_proposal(&env, proposal_id).unwrap();
         assert_eq!(
             proposal.status,
             ProposalStatus::Draft,
-            "Status should be Draft"
+            "Status should be Canceled"
         );
-        assert_eq!(proposal.actions, actions, "Actions mismatch");
     });
 
-    let events = env.events().all();
-    assert_eq!(events.len(), 2, "Expected init and proposal created events");
-    assert_eq!(
-        events,
-        vec![
-            &env,
-            (
-                contract_id.clone(),
-                (symbol_short!("govern"), symbol_short!("init")).into_val(&env),
-                (
-                    admin.clone(),
-                    token_id.clone(),
-                    referral_id.clone(),
-                    auction.clone()
-                )
-                    .into_val(&env)
-            ),
-            (
-                contract_id.clone(),
-                (symbol_short!("proposal"), symbol_short!("created")).into_val(&env),
-                (proposal_id, proposer.clone(), title).into_val(&env)
-            )
-        ]
-    );
+    governance_client.activate_proposal(&moderator, &proposal_id);
 
-    let balance = token_client.get_balance(&proposer);
-    assert_eq!(balance, 1000, "Stake should be locked (2000 - 1000)");
+    env.as_contract(&governance_id, || {
+        let proposal = ProposalManager::get_proposal(&env, proposal_id).unwrap();
+        assert_eq!(
+            proposal.status,
+            ProposalStatus::Active,
+            "Status should be Active"
+        );
+    });
+
+    governance_client.cancel_proposal(&moderator, &proposal_id);
+
+    env.as_contract(&governance_id, || {
+        let proposal = ProposalManager::get_proposal(&env, proposal_id).unwrap();
+        assert_eq!(
+            proposal.status,
+            ProposalStatus::Canceled,
+            "Status should be Canceled"
+        );
+    });
+
+    let balance = token_client.balance(&proposer);
+    assert_eq!(balance, 2000, "Stake should be returned");
 }
 
-// #[test]
-// fn test_create_proposal_insufficient_stake() {
-//     let env = Env::default();
-//     env.mock_all_auths();
-
-//     let contract_id = env.register(GovernanceContract, ());
-//     let client = GovernanceContractClient::new(&env, &contract_id);
-
-//     let admin = Address::generate(&env);
-//     let proposer = Address::generate(&env);
-//     let token_id = env.register(MockToken, ());
-//     let referral_id = env.register(MockReferral, ());
-//     let auction = Address::generate(&env);
-//     let config = VotingConfig {
-//         duration: VOTING_DURATION,
-//         quorum: QUORUM,
-//         threshold: THRESHOLD,
-//         execution_delay: EXECUTION_DELAY,
-//         one_address_one_vote: false,
-//     };
-
-//     client.initialize(&admin, &token_id, &referral_id, &auction, &config);
-
-//     let token_client = MockTokenClient::new(&env, &token_id);
-//     token_client.set_balance(&proposer, 500); // Less than REQUIRED_STAKE
-//     let referral_client = MockReferralClient::new(&env, &referral_id);
-//     referral_client.set_user_verified(&proposer, true);
-//     referral_client.set_user_level(&proposer, UserLevel::Platinum);
-
-//     let title = Symbol::new(&env, PROPOSAL_TITLE);
-//     let description = Symbol::new(&env, PROPOSAL_DESC);
-//     let metadata_hash = String::from_str(&env, METADATA_HASH);
-//     let proposal_type = ProposalType::EconomicChange;
-//     let actions = vec![&env, Action::AppointModerator(proposer.clone())];
-
-//     let result = client.try_create_proposal(
-//         &proposer,
-//         &title,
-//         &description,
-//         &metadata_hash,
-//         &proposal_type,
-//         &actions,
-//         &config,
-//     );
-
-//     assert_eq!(result, Err(Ok(Error::InsufficientStake)), "Expected InsufficientStake error");
-
-//     let balance = token_client.get_balance(&proposer);
-//     assert_eq!(balance, 500, "Balance should not change");
-// }
-
-// #[test]
-// fn test_create_proposal_not_verified() {
-//     let env = Env::default();
-//     env.mock_all_auths();
-
-//     let contract_id = env.register(GovernanceContract, ());
-//     let client = GovernanceContractClient::new(&env, &contract_id);
-
-//     let admin = Address::generate(&env);
-//     let proposer = Address::generate(&env);
-//     let token_id = env.register(MockToken, ());
-//     let referral_id = env.register(MockReferral, ());
-//     let auction = Address::generate(&env);
-//     let config = VotingConfig {
-//         duration: VOTING_DURATION,
-//         quorum: QUORUM,
-//         threshold: THRESHOLD,
-//         execution_delay: EXECUTION_DELAY,
-//         one_address_one_vote: false,
-//     };
-
-//     client.initialize(&admin, &token_id, &referral_id, &auction, &config);
-
-//     let token_client = MockTokenClient::new(&env, &token_id);
-//     token_client.set_balance(&proposer, 2000);
-//     let referral_client = MockReferralClient::new(&env, &referral_id);
-//     referral_client.set_user_verified(&proposer, false); // Not verified
-//     referral_client.set_user_level(&proposer, UserLevel::Platinum);
-
-//     let title = Symbol::new(&env, PROPOSAL_TITLE);
-//     let description = Symbol::new(&env, PROPOSAL_DESC);
-//     let metadata_hash = String::from_str(&env, METADATA_HASH);
-//     let proposal_type = ProposalType::EconomicChange;
-//     let actions = vec![&env, Action::AppointModerator(proposer.clone())];
-
-//     let result = client.try_create_proposal(
-//         &proposer,
-//         &title,
-//         &description,
-//         &metadata_hash,
-//         &proposal_type,
-//         &actions,
-//         &config,
-//     );
-
-//     assert_eq!(result, Err(Ok(Error::NotVerified)), "Expected NotVerified error");
-// }
-
-// #[test]
-// fn test_create_proposal_proposal_limit_reached() {
-//     let env = Env::default();
-//     env.mock_all_auths();
-
-//     let contract_id = env.register(GovernanceContract, ());
-//     let client = GovernanceContractClient::new(&env, &contract_id);
-
-//     let admin = Address::generate(&env);
-//     let proposer = Address::generate(&env);
-//     let token_id = env.register(MockToken, ());
-//     let referral_id = env.register(MockReferral, ());
-//     let auction = Address::generate(&env);
-//     let config = VotingConfig {
-//         duration: VOTING_DURATION,
-//         quorum: QUORUM,
-//         threshold: THRESHOLD,
-//         execution_delay: EXECUTION_DELAY,
-//         one_address_one_vote: false,
-//     };
-
-//     client.initialize(&admin, &token_id, &referral_id, &auction, &config);
-
-//     let token_client = MockTokenClient::new(&env, &token_id);
-//     token_client.set_balance(&proposer, 10000);
-//     let referral_client = MockReferralClient::new(&env, &referral_id);
-//     referral_client.set_user_verified(&proposer, true);
-//     referral_client.set_user_level(&proposer, UserLevel::Platinum);
-
-//     let title = Symbol::new(&env, PROPOSAL_TITLE);
-//     let description = Symbol::new(&env, PROPOSAL_DESC);
-//     let metadata_hash = String::from_str(&env, METADATA_HASH);
-//     let proposal_type = ProposalType::EconomicChange;
-//     let actions = vec![&env, Action::AppointModerator(proposer.clone())];
-
-//     // Create 5 proposals (reaching limit)
-//     for i in 1..=PROPOSAL_LIMIT {
-//         client.create_proposal(
-//             &proposer,
-//             &Symbol::new(&env, &format!("Proposal {}", i)),
-//             &description,
-//             &metadata_hash,
-//             &proposal_type,
-//             &actions,
-//             &config,
-//         );
-//     }
-
-//     // Try to create one more
-//     let result = client.try_create_proposal(
-//         &proposer,
-//         &title,
-//         &description,
-//         &metadata_hash,
-//         &proposal_type,
-//         &actions,
-//         &config,
-//     );
-
-//     assert_eq!(
-//         result,
-//         Err(Ok(Error::ProposalLimitReached)),
-//         "Expected ProposalLimitReached error"
-//     );
-// }
-
-// #[test]
-// fn test_create_proposal_in_cooldown() {
-//     let env = Env::default();
-//     env.mock_all_auths();
-
-//     let contract_id = env.register(GovernanceContract, ());
-//     let client = GovernanceContractClient::new(&env, &contract_id);
-
-//     let admin = Address::generate(&env);
-//     let proposer = Address::generate(&env);
-//     let token_id = env.register(MockToken, ());
-//     let referral_id = env.register(MockReferral, ());
-//     let auction = Address::generate(&env);
-//     let config = VotingConfig {
-//         duration: VOTING_DURATION,
-//         quorum: QUORUM,
-//         threshold: THRESHOLD,
-//         execution_delay: EXECUTION_DELAY,
-//         one_address_one_vote: false,
-//     };
-
-//     client.initialize(&admin, &token_id, &referral_id, &auction, &config);
-
-//     let token_client = MockTokenClient::new(&env, &token_id);
-//     token_client.set_balance(&proposer, 2000);
-//     let referral_client = MockReferralClient::new(&env, &referral_id);
-//     referral_client.set_user_verified(&proposer, true);
-//     referral_client.set_user_level(&proposer, UserLevel::Platinum);
-
-//     let title = Symbol::new(&env, PROPOSAL_TITLE);
-//     let description = Symbol::new(&env, PROPOSAL_DESC);
-//     let metadata_hash = String::from_str(&env, METADATA_HASH);
-//     let proposal_type = ProposalType::EconomicChange;
-//     let actions = vec![&env, Action::AppointModerator(proposer.clone())];
-
-//     // Create first proposal
-//     client.create_proposal(
-//         &proposer,
-//         &title,
-//         &description,
-//         &metadata_hash,
-//         &proposal_type,
-//         &actions,
-//         &config,
-//     );
-
-//     // Try to create another within cooldown
-//     env.ledger().with_mut(|li| {
-//         li.timestamp += COOLDOWN_PERIOD / 2; // Not enough time passed
-//     });
-
-//     let result = client.try_create_proposal(
-//         &proposer,
-//         &title,
-//         &description,
-//         &metadata_hash,
-//         &proposal_type,
-//         &actions,
-//         &config,
-//     );
-
-//     assert_eq!(result, Err(Ok(Error::ProposalInCooldown)), "Expected ProposalInCooldown error");
-
-//     // Try after cooldown
-//     env.ledger().with_mut(|li| {
-//         li.timestamp += COOLDOWN_PERIOD; // Past cooldown
-//     });
-
-//     let proposal_id = client.create_proposal(
-//         &proposer,
-//         &title,
-//         &description,
-//         &metadata_hash,
-//         &proposal_type,
-//         &actions,
-//         &config,
-//     );
-//     assert_eq!(proposal_id, 2, "Second proposal should succeed");
-// }
-
-// #[test]
-// fn test_activate_proposal() {
-//     let env = Env::default();
-//     env.mock_all_auths();
-
-//     let contract_id = env.register(GovernanceContract, ());
-//     let client = GovernanceContractClient::new(&env, &contract_id);
-
-//     let admin = Address::generate(&env);
-//     let proposer = Address::generate(&env);
-//     let moderator = Address::generate(&env);
-//     let token_id = env.register(MockToken, ());
-//     let referral_id = env.register(MockReferral, ());
-//     let auction = Address::generate(&env);
-//     let config = VotingConfig {
-//         duration: VOTING_DURATION,
-//         quorum: QUORUM,
-//         threshold: THRESHOLD,
-//         execution_delay: EXECUTION_DELAY,
-//         one_address_one_vote: false,
-//     };
-
-//     client.initialize(&admin, &token_id, &referral_id, &auction, &config);
-
-//     let token_client = MockTokenClient::new(&env, &token_id);
-//     token_client.set_balance(&proposer, 2000);
-//     let referral_client = MockReferralClient::new(&env, &referral_id);
-//     referral_client.set_user_verified(&proposer, true);
-//     referral_client.set_user_level(&proposer, UserLevel::Platinum);
-
-//     // Set moderator
-//     env.as_contract(&contract_id, || {
-//         let mut moderators: Vec<Address> = vec![&env];
-//         moderators.push_back(moderator.clone());
-//         env.storage().instance().set(&MODERATOR_KEY, &moderators);
-//     });
-
-//     let title = Symbol::new(&env, PROPOSAL_TITLE);
-//     let description = Symbol::new(&env, PROPOSAL_DESC);
-//     let metadata_hash = String::from_str(&env, METADATA_HASH);
-//     let proposal_type = ProposalType::EconomicChange;
-//     let actions = vec![&env, Action::AppointModerator(proposer.clone())];
-
-//     let proposal_id = client.create_proposal(
-//         &proposer,
-//         &title,
-//         &description,
-//         &metadata_hash,
-//         &proposal_type,
-//         &actions,
-//         &config,
-//     );
-
-//     client.activate_proposal(&proposal_id);
-
-//     env.as_contract(&contract_id, || {
-//         let proposal = ProposalManager::get_proposal(&env, proposal_id).unwrap();
-//         assert_eq!(proposal.status, ProposalStatus::Active, "Status should be Active");
-//         assert_ne!(proposal.activated_at, 0, "Activated_at should be set");
-//     });
-
-//     let events = env.events().all();
-//     assert_eq!(events.len(), 3, "Expected init, created, and activated events");
-//     assert_eq!(
-//         events.get_unchecked(events.len() - 1),
-//         (
-//             contract_id.clone(),
-//             (symbol_short!("proposal"), symbol_short!("activated")).into_val(&env),
-//             proposal_id.into_val(&env)
-//         )
-//     );
-// }
-
-// #[test]
-// fn test_activate_proposal_no_moderators() {
-//     let env = Env::default();
-//     env.mock_all_auths();
-
-//     let contract_id = env.register(GovernanceContract, ());
-//     let client = GovernanceContractClient::new(&env, &contract_id);
-
-//     let admin = Address::generate(&env);
-//     let proposer = Address::generate(&env);
-//     let token_id = env.register(MockToken, ());
-//     let referral_id = env.register(MockReferral, ());
-//     let auction = Address::generate(&env);
-//     let config = VotingConfig {
-//         duration: VOTING_DURATION,
-//         quorum: QUORUM,
-//         threshold: THRESHOLD,
-//         execution_delay: EXECUTION_DELAY,
-//         one_address_one_vote: false,
-//     };
-
-//     client.initialize(&admin, &token_id, &referral_id, &auction, &config);
-
-//     let token_client = MockTokenClient::new(&env, &token_id);
-//     token_client.set_balance(&proposer, 2000);
-//     let referral_client = MockReferralClient::new(&env, &referral_id);
-//     referral_client.set_user_verified(&proposer, true);
-//     referral_client.set_user_level(&proposer, UserLevel::Platinum);
-
-//     let title = Symbol::new(&env, PROPOSAL_TITLE);
-//     let description = Symbol::new(&env, PROPOSAL_DESC);
-//     let metadata_hash = String::from_str(&env, METADATA_HASH);
-//     let proposal_type = ProposalType::EconomicChange;
-//     let actions = vec![&env, Action::AppointModerator(proposer.clone())];
-
-//     let proposal_id = client.create_proposal(
-//         &proposer,
-//         &title,
-//         &description,
-//         &metadata_hash,
-//         &proposal_type,
-//         &actions,
-//         &config,
-//     );
-
-//     let result = client.try_activate_proposal(&proposal_id);
-//     assert_eq!(result, Err(Ok(Error::ModeratorNotFound)), "Expected ModeratorNotFound error");
-// }
-
-// #[test]
-// fn test_cancel_proposal() {
-//     let env = Env::default();
-//     env.mock_all_auths();
-
-//     let contract_id = env.register(GovernanceContract, ());
-//     let client = GovernanceContractClient::new(&env, &contract_id);
-
-//     let admin = Address::generate(&env);
-//     let proposer = Address::generate(&env);
-//     let token_id = env.register(MockToken, ());
-//     let referral_id = env.register(MockReferral, ());
-//     let auction = Address::generate(&env);
-//     let config = VotingConfig {
-//         duration: VOTING_DURATION,
-//         quorum: QUORUM,
-//         threshold: THRESHOLD,
-//         execution_delay: EXECUTION_DELAY,
-//         one_address_one_vote: false,
-//     };
-
-//     client.initialize(&admin, &token_id, &referral_id, &auction, &config);
-
-//     let token_client = MockTokenClient::new(&env, &token_id);
-//     token_client.set_balance(&proposer, 2000);
-//     let referral_client = MockReferralClient::new(&env, &referral_id);
-//     referral_client.set_user_verified(&proposer, true);
-//     referral_client.set_user_level(&proposer, UserLevel::Platinum);
-
-//     let title = Symbol::new(&env, PROPOSAL_TITLE);
-//     let description = Symbol::new(&env, PROPOSAL_DESC);
-//     let metadata_hash = String::from_str(&env, METADATA_HASH);
-//     let proposal_type = ProposalType::EconomicChange;
-//     let actions = vec![&env, Action::AppointModerator(proposer.clone())];
-
-//     let proposal_id = client.create_proposal(
-//         &proposer,
-//         &title,
-//         &description,
-//         &metadata_hash,
-//         &proposal_type,
-//         &actions,
-//         &config,
-//     );
-
-//     client.cancel_proposal(&proposal_id);
-
-//     env.as_contract(&contract_id, || {
-//         let proposal = ProposalManager::get_proposal(&env, proposal_id).unwrap();
-//         assert_eq!(proposal.status, ProposalStatus::Canceled, "Status should be Canceled");
-//     });
-
-//     let balance = token_client.get_balance(&proposer);
-//     assert_eq!(balance, 2000, "Stake should be returned");
-
-//     let events = env.events().all();
-//     assert_eq!(events.len(), 3, "Expected init, created, and canceled events");
-//     assert_eq!(
-//         events.get_unchecked(events.len() - 1),
-//         (
-//             contract_id.clone(),
-//             (symbol_short!("proposal"), symbol_short!("canceled")).into_val(&env),
-//             proposal_id.into_val(&env)
-//         )
-//     );
-// }
-
-// #[test]
-// fn test_veto_proposal() {
-//     let env = Env::default();
-//     env.mock_all_auths();
-
-//     let contract_id = env.register(GovernanceContract, ());
-//     let client = GovernanceContractClient::new(&env, &contract_id);
-
-//     let admin = Address::generate(&env);
-//     let proposer = Address::generate(&env);
-//     let moderator = Address::generate(&env);
-//     let token_id = env.register(MockToken, ());
-//     let referral_id = env.register(MockReferral, ());
-//     let auction = Address::generate(&env);
-//     let config = VotingConfig {
-//         duration: VOTING_DURATION,
-//         quorum: QUORUM,
-//         threshold: THRESHOLD,
-//         execution_delay: EXECUTION_DELAY,
-//         one_address_one_vote: false,
-//     };
-
-//     client.initialize(&admin, &token_id, &referral_id, &auction, &config);
-
-//     let token_client = MockTokenClient::new(&env, &token_id);
-//     token_client.set_balance(&proposer, 2000);
-//     let referral_client = MockReferralClient::new(&env, &referral_id);
-//     referral_client.set_user_verified(&proposer, true);
-//     referral_client.set_user_level(&proposer, UserLevel::Platinum);
-
-//     env.as_contract(&contract_id, || {
-//         let mut moderators: Vec<Address> = vec![&env];
-//         moderators.push_back(moderator.clone());
-//         env.storage().instance().set(&MODERATOR_KEY, &moderators);
-//     });
-
-//     let title = Symbol::new(&env, PROPOSAL_TITLE);
-//     let description = Symbol::new(&env, PROPOSAL_DESC);
-//     let metadata_hash = String::from_str(&env, METADATA_HASH);
-//     let proposal_type = ProposalType::EconomicChange;
-//     let actions = vec![&env, Action::AppointModerator(proposer.clone())];
-
-//     let proposal_id = client.create_proposal(
-//         &proposer,
-//         &title,
-//         &description,
-//         &metadata_hash,
-//         &proposal_type,
-//         &actions,
-//         &config,
-//     );
-
-//     client.activate_proposal(&proposal_id);
-//     client.mark_passed(&proposal_id);
-//     client.veto_proposal(&moderator, &proposal_id);
-
-//     env.as_contract(&contract_id, || {
-//         let proposal = ProposalManager::get_proposal(&env, proposal_id).unwrap();
-//         assert_eq!(proposal.status, ProposalStatus::Vetoed, "Status should be Vetoed");
-//     });
-
-//     let balance = token_client.get_balance(&proposer);
-//     assert_eq!(balance, 1000, "Stake should be burned (2000 - 1000)");
-
-//     let events = env.events().all();
-//     assert_eq!(
-//         events.len(),
-//         5,
-//         "Expected init, created, activated, passed, and vetoed events"
-//     );
-//     assert_eq!(
-//         events.get_unchecked(events.len() - 1),
-//         (
-//             contract_id.clone(),
-//             (symbol_short!("proposal"), symbol_short!("vetoed")).into_val(&env),
-//             (proposal_id, moderator.clone()).into_val(&env)
-//         )
-//     );
-// }
-
-// #[test]
-// fn test_veto_proposal_unauthorized() {
-//     let env = Env::default();
-//     env.mock_all_auths();
-
-//     let contract_id = env.register(GovernanceContract, ());
-//     let client = GovernanceContractClient::new(&env, &contract_id);
-
-//     let admin = Address::generate(&env);
-//     let proposer = Address::generate(&env);
-//     let non_moderator = Address::generate(&env);
-//     let token_id = env.register(MockToken, ());
-//     let referral_id = env.register(MockReferral, ());
-//     let auction = Address::generate(&env);
-//     let config = VotingConfig {
-//         duration: VOTING_DURATION,
-//         quorum: QUORUM,
-//         threshold: THRESHOLD,
-//         execution_delay: EXECUTION_DELAY,
-//         one_address_one_vote: false,
-//     };
-
-//     client.initialize(&admin, &token_id, &referral_id, &auction, &config);
-
-//     let token_client = MockTokenClient::new(&env, &token_id);
-//     token_client.set_balance(&proposer, 2000);
-//     let referral_client = MockReferralClient::new(&env, &referral_id);
-//     referral_client.set_user_verified(&proposer, true);
-//     referral_client.set_user_level(&proposer, UserLevel::Platinum);
-
-//     let title = Symbol::new(&env, PROPOSAL_TITLE);
-//     let description = Symbol::new(&env, PROPOSAL_DESC);
-//     let metadata_hash = String::from_str(&env, METADATA_HASH);
-//     let proposal_type = ProposalType::EconomicChange;
-//     let actions = vec![&env, Action::AppointModerator(proposer.clone())];
-
-//     let proposal_id = client.create_proposal(
-//         &proposer,
-//         &title,
-//         &description,
-//         &metadata_hash,
-//         &proposal_type,
-//         &actions,
-//         &config,
-//     );
-
-//     client.activate_proposal(&proposal_id);
-//     client.mark_passed(&proposal_id);
-
-//     let result = client.try_veto_proposal(&non_moderator, &proposal_id);
-//     assert_eq!(result, Err(Ok(Error::Unauthorized)), "Expected Unauthorized error");
-
-//     env.as_contract(&contract_id, || {
-//         let proposal = ProposalManager::get_proposal(&env, proposal_id).unwrap();
-//         assert_eq!(proposal.status, ProposalStatus::Passed, "Status should remain Passed");
-//     });
-// }
-
-// #[test]
-// fn test_mark_passed_and_executed() {
-//     let env = Env::default();
-//     env.mock_all_auths();
-
-//     let contract_id = env.register(GovernanceContract, ());
-//     let client = GovernanceContractClient::new(&env, &contract_id);
-
-//     let admin = Address::generate(&env);
-//     let proposer = Address::generate(&env);
-//     let token_id = env.register(MockToken, ());
-//     let referral_id = env.register(MockReferral, ());
-//     let auction = Address::generate(&env);
-//     let config = VotingConfig {
-//         duration: VOTING_DURATION,
-//         quorum: QUORUM,
-//         threshold: THRESHOLD,
-//         execution_delay: EXECUTION_DELAY,
-//         one_address_one_vote: false,
-//     };
-
-//     client.initialize(&admin, &token_id, &referral_id, &auction, &config);
-
-//     let token_client = MockTokenClient::new(&env, &token_id);
-//     token_client.set_balance(&proposer, 2000);
-//     let referral_client = MockReferralClient::new(&env, &referral_id);
-//     referral_client.set_user_verified(&proposer, true);
-//     referral_client.set_user_level(&proposer, UserLevel::Platinum);
-
-//     let title = Symbol::new(&env, PROPOSAL_TITLE);
-//     let description = Symbol::new(&env, PROPOSAL_DESC);
-//     let metadata_hash = String::from_str(&env, METADATA_HASH);
-//     let proposal_type = ProposalType::EconomicChange;
-//     let actions = vec![&env, Action::AppointModerator(proposer.clone())];
-
-//     let proposal_id = client.create_proposal(
-//         &proposer,
-//         &title,
-//         &description,
-//         &metadata_hash,
-//         &proposal_type,
-//         &actions,
-//         &config,
-//     );
-
-//     client.activate_proposal(&proposal_id);
-//     client.mark_passed(&proposal_id);
-//     client.mark_executed(&proposal_id);
-
-//     env.as_contract(&contract_id, || {
-//         let proposal = ProposalManager::get_proposal(&env, proposal_id).unwrap();
-//         assert_eq!(proposal.status, ProposalStatus::Executed, "Status should be Executed");
-//     });
-
-//     let balance = token_client.get_balance(&proposer);
-//     assert_eq!(balance, 2000, "Stake should be returned");
-
-//     let events = env.events().all();
-//     assert_eq!(
-//         events.len(),
-//         5,
-//         "Expected init, created, activated, passed, and executed events"
-//     );
-//     assert_eq!(
-//         events.get_unchecked(events.len() - 1),
-//         (
-//             contract_id.clone(),
-//             (symbol_short!("proposal"), symbol_short!("executed")).into_val(&env),
-//             proposal_id.into_val(&env)
-//         )
-//     );
-// }
-
-// #[test]
-// fn test_mark_rejected() {
-//     let env = Env::default();
-//     env.mock_all_auths();
-
-//     let contract_id = env.register(GovernanceContract, ());
-//     let client = GovernanceContractClient::new(&env, &contract_id);
-
-//     let admin = Address::generate(&env);
-//     let proposer = Address::generate(&env);
-//     let token_id = env.register(MockToken, ());
-//     let referral_id = env.register(MockReferral, ());
-//     let auction = Address::generate(&env);
-//     let config = VotingConfig {
-//         duration: VOTING_DURATION,
-//         quorum: QUORUM,
-//         threshold: THRESHOLD,
-//         execution_delay: EXECUTION_DELAY,
-//         one_address_one_vote: false,
-//     };
-
-//     client.initialize(&admin, &token_id, &referral_id, &auction, &config);
-
-//     let token_client = MockTokenClient::new(&env, &token_id);
-//     token_client.set_balance(&proposer, 2000);
-//     let referral_client = MockReferralClient::new(&env, &referral_id);
-//     referral_client.set_user_verified(&proposer, true);
-//     referral_client.set_user_level(&proposer, UserLevel::Platinum);
-
-//     let title = Symbol::new(&env, PROPOSAL_TITLE);
-//     let description = Symbol::new(&env, PROPOSAL_DESC);
-//     let metadata_hash = String::from_str(&env, METADATA_HASH);
-//     let proposal_type = ProposalType::EconomicChange;
-//     let actions = vec![&env, Action::AppointModerator(proposer.clone())];
-
-//     let proposal_id = client.create_proposal(
-//         &proposer,
-//         &title,
-//         &description,
-//         &metadata_hash,
-//         &proposal_type,
-//         &actions,
-//         &config,
-//     );
-
-//     client.activate_proposal(&proposal_id);
-//     client.mark_rejected(&proposal_id);
-
-//     env.as_contract(&contract_id, || {
-//         let proposal = ProposalManager::get_proposal(&env, proposal_id).unwrap();
-//         assert_eq!(proposal.status, ProposalStatus::Rejected, "Status should be Rejected");
-//     });
-
-//     let balance = token_client.get_balance(&proposer);
-//     assert_eq!(balance, 2000, "Stake should be returned");
-
-//     let events = env.events().all();
-//     assert_eq!(events.len(), 4, "Expected init, created, activated, and rejected events");
-//     assert_eq!(
-//         events.get_unchecked(events.len() - 1),
-//         (
-//             contract_id.clone(),
-//             (symbol_short!("proposal"), symbol_short!("rejected")).into_val(&env),
-//             proposal_id.into_val(&env)
-//         )
-//     );
-// }
-
-// #[test]
-// fn test_cast_vote_one_address_one_vote() {
-//     let env = Env::default();
-//     env.mock_all_auths();
-
-//     let contract_id = env.register(GovernanceContract, ());
-//     let client = GovernanceContractClient::new(&env, &contract_id);
-
-//     let admin = Address::generate(&env);
-//     let proposer = Address::generate(&env);
-//     let voter = Address::generate(&env);
-//     let token_id = env.register(MockToken, ());
-//     let referral_id = env.register(MockReferral, ());
-//     let auction = Address::generate(&env);
-//     let config = VotingConfig {
-//         duration: VOTING_DURATION,
-//         quorum: QUORUM,
-//         threshold: THRESHOLD,
-//         execution_delay: EXECUTION_DELAY,
-//         one_address_one_vote: true,
-//     };
-
-//     client.initialize(&admin, &token_id, &referral_id, &auction, &config);
-
-//     let token_client = MockTokenClient::new(&env, &token_id);
-//     token_client.set_balance(&proposer, 2000);
-//     let referral_client = MockReferralClient::new(&env, &referral_id);
-//     referral_client.set_user_verified(&proposer, true);
-//     referral_client.set_user_level(&proposer, UserLevel::Platinum);
-//     referral_client.set_user_verified(&voter, true);
-//     referral_client.set_user_level(&voter, UserLevel::Platinum);
-//     referral_client.set_total_users(100);
-
-//     let title = Symbol::new(&env, PROPOSAL_TITLE);
-//     let description = Symbol::new(&env, PROPOSAL_DESC);
-//     let metadata_hash = String::from_str(&env, METADATA_HASH);
-//     let proposal_type = ProposalType::EconomicChange;
-//     let actions = vec![&env, Action::AppointModerator(proposer.clone())];
-
-//     let proposal_id = client.create_proposal(
-//         &proposer,
-//         &title,
-//         &description,
-//         &metadata_hash,
-//         &proposal_type,
-//         &actions,
-//         &config,
-//     );
-
-//     client.activate_proposal(&proposal_id);
-
-//     client.cast_vote(&proposal_id, &voter, true, 1000); // Weight ignored in one_address_one_vote
-
-//     env.as_contract(&contract_id, || {
-//         let for_votes = VotingSystem::get_for_votes(&env, proposal_id);
-//         let total_votes = VotingSystem::get_total_votes(&env, proposal_id);
-//         let voter_count = VotingSystem::get_voter_count(&env, proposal_id);
-//         assert_eq!(for_votes, 1, "For votes should be 1");
-//         assert_eq!(total_votes, 1, "Total votes should be 1");
-//         assert_eq!(voter_count, 1, "Voter count should be 1");
-//     });
-
-//     let events = env.events().all();
-//     assert_eq!(events.len(), 4, "Expected init, created, activated, and vote cast events");
-//     assert_eq!(
-//         events.get_unchecked(events.len() - 1),
-//         (
-//             contract_id.clone(),
-//             (symbol_short!("vote"), symbol_short!("cast")).into_val(&env),
-//             (proposal_id, voter.clone(), true, 1i128).into_val(&env)
-//         )
-//     );
-// }
-
-// #[test]
-// fn test_cast_vote_already_voted() {
-//     let env = Env::default();
-//     env.mock_all_auths();
-
-//     let contract_id = env.register(GovernanceContract, ());
-//     let client = GovernanceContractClient::new(&env, &contract_id);
-
-//     let admin = Address::generate(&env);
-//     let proposer = Address::generate(&env);
-//     let voter = Address::generate(&env);
-//     let token_id = env.register(MockToken, ());
-//     let referral_id = env.register(MockReferral, ());
-//     let auction = Address::generate(&env);
-//     let config = VotingConfig {
-//         duration: VOTING_DURATION,
-//         quorum: QUORUM,
-//         threshold: THRESHOLD,
-//         execution_delay: EXECUTION_DELAY,
-//         one_address_one_vote: false,
-//     };
-
-//     client.initialize(&admin, &token_id, &referral_id, &auction, &config);
-
-//     let token_client = MockTokenClient::new(&env, &token_id);
-//     token_client.set_balance(&proposer, 2000);
-//     token_client.set_balance(&voter, 1000);
-//     let referral_client = MockReferralClient::new(&env, &referral_id);
-//     referral_client.set_user_verified(&proposer, true);
-//     referral_client.set_user_level(&proposer, UserLevel::Platinum);
-//     referral_client.set_user_verified(&voter, true);
-//     referral_client.set_user_level(&voter, UserLevel::Platinum);
-
-//     let title = Symbol::new(&env, PROPOSAL_TITLE);
-//     let description = Symbol::new(&env, PROPOSAL_DESC);
-//     let metadata_hash = String::from_str(&env, METADATA_HASH);
-//     let proposal_type = ProposalType::EconomicChange;
-//     let actions = vec![&env, Action::AppointModerator(proposer.clone())];
-
-//     let proposal_id = client.create_proposal(
-//         &proposer,
-//         &title,
-//         &description,
-//         &metadata_hash,
-//         &proposal_type,
-//         &actions,
-//         &config,
-//     );
-
-//     client.activate_proposal(&proposal_id);
-//     client.cast_vote(&proposal_id, &voter, true, 1000);
-
-//     let result = client.try_cast_vote(&proposal_id, &voter, true, 1000);
-//     assert_eq!(result, Err(Ok(Error::AlreadyVoted)), "Expected AlreadyVoted error");
-// }
+#[test]
+fn test_veto_proposal() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    // Setup test environment
+    let (governance_id, referral_id, auction_id, governance_client, referral_client) =
+        create_test_contracts(&env);
+    let (admin, proposer, config) = setup_governance_args(&env);
+    let (token_id, token_admin, token_client) = create_token_contracts(&env, &admin);
+    let moderator = Address::generate(&env);
+
+    governance_client.initialize(&admin, &token_id, &referral_id, &auction_id, &config);
+
+    // Set token balance and referral status
+    token_admin.mint(&proposer, &2000);
+    referral_client.set_user_verified(&proposer, &true);
+    referral_client.set_user_level(&proposer, &UserLevel::Platinum);
+
+    // Set moderator
+    env.as_contract(&governance_id, || {
+        let mut moderators: Vec<Address> = vec![&env];
+        moderators.push_back(moderator.clone());
+        env.storage().instance().set(&MODERATOR_KEY, &moderators);
+    });
+
+    let (title, description, metadata_hash, proposal_type, actions) =
+        setup_proposal_args(&env, &proposer);
+
+    let proposal_id = governance_client.create_proposal(
+        &proposer,
+        &title,
+        &description,
+        &metadata_hash,
+        &proposal_type,
+        &actions,
+        &config,
+    );
+
+    governance_client.activate_proposal(&moderator, &proposal_id);
+    governance_client.mark_passed(&moderator, &proposal_id);
+    governance_client.veto_proposal(&moderator, &proposal_id);
+
+    env.as_contract(&governance_id, || {
+        let proposal = ProposalManager::get_proposal(&env, proposal_id).unwrap();
+        assert_eq!(
+            proposal.status,
+            ProposalStatus::Vetoed,
+            "Status should be Vetoed"
+        );
+    });
+
+    let balance = token_client.balance(&proposer);
+    assert_eq!(balance, 1000, "Stake should be burned (2000 - 1000)");
+}
+
+#[test]
+fn test_veto_proposal_unauthorized() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    // Setup test environment
+    let (governance_id, referral_id, auction_id, governance_client, referral_client) =
+        create_test_contracts(&env);
+    let (admin, proposer, config) = setup_governance_args(&env);
+    let (token_id, token_admin, _) = create_token_contracts(&env, &admin);
+    let moderator = Address::generate(&env);
+    let non_moderator = Address::generate(&env);
+
+    governance_client.initialize(&admin, &token_id, &referral_id, &auction_id, &config);
+
+    // Set token balance and referral status
+    token_admin.mint(&proposer, &2000);
+    referral_client.set_user_verified(&proposer, &true);
+    referral_client.set_user_level(&proposer, &UserLevel::Platinum);
+
+    // Set moderator
+    env.as_contract(&governance_id, || {
+        let mut moderators: Vec<Address> = vec![&env];
+        moderators.push_back(moderator.clone());
+        env.storage().instance().set(&MODERATOR_KEY, &moderators);
+    });
+
+    let (title, description, metadata_hash, proposal_type, actions) =
+        setup_proposal_args(&env, &proposer);
+
+    let proposal_id = governance_client.create_proposal(
+        &proposer,
+        &title,
+        &description,
+        &metadata_hash,
+        &proposal_type,
+        &actions,
+        &config,
+    );
+
+    governance_client.activate_proposal(&moderator, &proposal_id);
+    governance_client.mark_passed(&moderator, &proposal_id);
+
+    let result = governance_client.try_veto_proposal(&non_moderator, &proposal_id);
+    assert_eq!(
+        result,
+        Err(Ok(Error::Unauthorized)),
+        "Expected Unauthorized error"
+    );
+
+    env.as_contract(&governance_id, || {
+        let proposal = ProposalManager::get_proposal(&env, proposal_id).unwrap();
+        assert_eq!(
+            proposal.status,
+            ProposalStatus::Passed,
+            "Status should remain Passed"
+        );
+    });
+}
+
+#[test]
+fn test_mark_passed_and_executed() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    // Setup test environment
+    let (governance_id, referral_id, auction_id, governance_client, referral_client) =
+        create_test_contracts(&env);
+    let (admin, proposer, config) = setup_governance_args(&env);
+    let (token_id, token_admin, token_client) = create_token_contracts(&env, &admin);
+    let moderator = Address::generate(&env);
+
+    governance_client.initialize(&admin, &token_id, &referral_id, &auction_id, &config);
+
+    // Set token balance and referral status
+    token_admin.mint(&proposer, &2000);
+    referral_client.set_user_verified(&proposer, &true);
+    referral_client.set_user_level(&proposer, &UserLevel::Platinum);
+
+    // Set moderator
+    env.as_contract(&governance_id, || {
+        let mut moderators: Vec<Address> = vec![&env];
+        moderators.push_back(moderator.clone());
+        env.storage().instance().set(&MODERATOR_KEY, &moderators);
+    });
+
+    let (title, description, metadata_hash, proposal_type, actions) =
+        setup_proposal_args(&env, &proposer);
+
+    let proposal_id = governance_client.create_proposal(
+        &proposer,
+        &title,
+        &description,
+        &metadata_hash,
+        &proposal_type,
+        &actions,
+        &config,
+    );
+
+    governance_client.activate_proposal(&moderator, &proposal_id);
+    governance_client.mark_passed(&moderator, &proposal_id);
+    governance_client.mark_executed(&moderator, &proposal_id);
+
+    env.as_contract(&governance_id, || {
+        let proposal = ProposalManager::get_proposal(&env, proposal_id).unwrap();
+        assert_eq!(
+            proposal.status,
+            ProposalStatus::Executed,
+            "Status should be Executed"
+        );
+    });
+
+    let balance = token_client.balance(&proposer);
+    assert_eq!(balance, 2000, "Stake should be returned");
+}
+
+#[test]
+fn test_mark_rejected() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    // Setup test environment
+    let (governance_id, referral_id, auction_id, governance_client, referral_client) =
+        create_test_contracts(&env);
+    let (admin, proposer, config) = setup_governance_args(&env);
+    let (token_id, token_admin, token_client) = create_token_contracts(&env, &admin);
+    let moderator = Address::generate(&env);
+
+    governance_client.initialize(&admin, &token_id, &referral_id, &auction_id, &config);
+
+    // Set token balance and referral status
+    token_admin.mint(&proposer, &2000);
+    referral_client.set_user_verified(&proposer, &true);
+    referral_client.set_user_level(&proposer, &UserLevel::Platinum);
+
+    // Set moderator
+    env.as_contract(&governance_id, || {
+        let mut moderators: Vec<Address> = vec![&env];
+        moderators.push_back(moderator.clone());
+        env.storage().instance().set(&MODERATOR_KEY, &moderators);
+    });
+
+    let (title, description, metadata_hash, proposal_type, actions) =
+        setup_proposal_args(&env, &proposer);
+
+    let proposal_id = governance_client.create_proposal(
+        &proposer,
+        &title,
+        &description,
+        &metadata_hash,
+        &proposal_type,
+        &actions,
+        &config,
+    );
+
+    governance_client.activate_proposal(&moderator, &proposal_id);
+    governance_client.mark_rejected(&moderator, &proposal_id);
+
+    env.as_contract(&governance_id, || {
+        let proposal = ProposalManager::get_proposal(&env, proposal_id).unwrap();
+        assert_eq!(
+            proposal.status,
+            ProposalStatus::Rejected,
+            "Status should be Rejected"
+        );
+    });
+
+    let balance = token_client.balance(&proposer);
+    assert_eq!(balance, 2000, "Stake should be returned");
+}
+
+#[test]
+fn test_cast_vote_one_address_one_vote() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    // Setup test environment
+    let (governance_id, referral_id, auction_id, governance_client, referral_client) =
+        create_test_contracts(&env);
+    let (admin, proposer, _) = setup_governance_args(&env);
+    let (token_id, token_admin, _) = create_token_contracts(&env, &admin);
+    let moderator = Address::generate(&env);
+    let voter = Address::generate(&env);
+    let one_vote_config = VotingConfig {
+        duration: VOTING_DURATION,
+        quorum: QUORUM,
+        threshold: THRESHOLD,
+        execution_delay: EXECUTION_DELAY,
+        one_address_one_vote: true,
+    };
+
+    governance_client.initialize(
+        &admin,
+        &token_id,
+        &referral_id,
+        &auction_id,
+        &one_vote_config,
+    );
+
+    // Set token balance and referral status
+    token_admin.mint(&proposer, &2000);
+    referral_client.set_user_verified(&proposer, &true);
+    referral_client.set_user_verified(&voter, &true);
+    referral_client.set_user_level(&proposer, &UserLevel::Platinum);
+    referral_client.set_user_level(&voter, &UserLevel::Platinum);
+    referral_client.set_total_users(&100);
+
+    // Set moderator
+    env.as_contract(&governance_id, || {
+        let mut moderators: Vec<Address> = vec![&env];
+        moderators.push_back(moderator.clone());
+        env.storage().instance().set(&MODERATOR_KEY, &moderators);
+    });
+
+    let (title, description, metadata_hash, proposal_type, actions) =
+        setup_proposal_args(&env, &proposer);
+
+    let proposal_id = governance_client.create_proposal(
+        &proposer,
+        &title,
+        &description,
+        &metadata_hash,
+        &proposal_type,
+        &actions,
+        &one_vote_config,
+    );
+
+    env.ledger().with_mut(|li| {
+        li.timestamp += COOLDOWN_PERIOD / 24; // Advance ledger to simulate proposal activation time
+    });
+
+    governance_client.activate_proposal(&moderator, &proposal_id);
+    governance_client.cast_vote(&voter, &proposal_id, &true); // Weight ignored in one_address_one_vote election
+
+    env.as_contract(&governance_id, || {
+        let for_votes = VotingSystem::get_for_votes(&env, proposal_id);
+        log!(&env, "For votes: {:?}", for_votes);
+        let total_votes = VotingSystem::get_total_votes(&env, proposal_id);
+        log!(&env, "Total votes: {:?}", total_votes);
+        let voter_count = VotingSystem::get_voter_count(&env, proposal_id);
+        log!(&env, "Voter count: {:?}", voter_count);
+
+        assert_eq!(for_votes, 1, "For votes should be 1");
+        assert_eq!(total_votes, 1, "Total votes should be 1");
+        assert_eq!(voter_count, 1, "Voter count should be 1");
+    });
+}
+
+#[test]
+fn test_cast_vote_already_voted() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    // Setup test environment
+    let (governance_id, referral_id, auction_id, governance_client, referral_client) =
+        create_test_contracts(&env);
+    let (admin, proposer, _) = setup_governance_args(&env);
+    let (token_id, token_admin, _) = create_token_contracts(&env, &admin);
+    let (title, description, metadata_hash, proposal_type, actions) =
+        setup_proposal_args(&env, &proposer);
+
+    let moderator = Address::generate(&env);
+    let voter = Address::generate(&env);
+    let one_vote_config = VotingConfig {
+        duration: VOTING_DURATION,
+        quorum: QUORUM,
+        threshold: THRESHOLD,
+        execution_delay: EXECUTION_DELAY,
+        one_address_one_vote: true,
+    };
+
+    governance_client.initialize(
+        &admin,
+        &token_id,
+        &referral_id,
+        &auction_id,
+        &one_vote_config,
+    );
+
+    // Set token balance and referral status
+    token_admin.mint(&proposer, &2000);
+    referral_client.set_user_verified(&proposer, &true);
+    referral_client.set_user_verified(&voter, &true);
+    referral_client.set_user_level(&proposer, &UserLevel::Platinum);
+    referral_client.set_user_level(&voter, &UserLevel::Platinum);
+    referral_client.set_total_users(&100);
+
+    // Set moderator
+    env.as_contract(&governance_id, || {
+        let mut moderators: Vec<Address> = vec![&env];
+        moderators.push_back(moderator.clone());
+        env.storage().instance().set(&MODERATOR_KEY, &moderators);
+    });
+
+    let proposal_id = governance_client.create_proposal(
+        &proposer,
+        &title,
+        &description,
+        &metadata_hash,
+        &proposal_type,
+        &actions,
+        &one_vote_config,
+    );
+
+    env.ledger().with_mut(|li| {
+        li.timestamp += COOLDOWN_PERIOD / 24;
+    });
+
+    governance_client.activate_proposal(&moderator, &proposal_id);
+    governance_client.cast_vote(&voter, &proposal_id, &true);
+
+    let result = governance_client.try_cast_vote(&voter, &proposal_id, &true);
+    assert_eq!(result, Err(Ok(Error::AlreadyVoted)), "Expected AlreadyVoted error");
+}
 
 // #[test]
 // fn test_tally_votes_passing() {
 //     let env = Env::default();
 //     env.mock_all_auths();
 
-//     let contract_id = env.register(GovernanceContract, ());
-//     let client = GovernanceContractClient::new(&env, &contract_id);
+//     let governance_id = env.register(GovernanceContract, ());
+//     let governance_client = GovernanceContractClient::new(&env, &governance_id);
 
 //     let admin = Address::generate(&env);
 //     let proposer = Address::generate(&env);
@@ -1062,7 +1058,7 @@ fn test_create_proposal_success() {
 //         one_address_one_vote: false,
 //     };
 
-//     client.initialize(&admin, &token_id, &referral_id, &auction, &config);
+//     governance_client.initialize(&admin, &token_id, &referral_id, &auction, &config);
 
 //     let token_client = MockTokenClient::new(&env, &token_id);
 //     token_client.set_balance(&proposer, 2000);
@@ -1083,7 +1079,7 @@ fn test_create_proposal_success() {
 //     let proposal_type = ProposalType::EconomicChange;
 //     let actions = vec![&env, Action::AppointModerator(proposer.clone())];
 
-//     let proposal_id = client.create_proposal(
+//     let proposal_id = governance_client.create_proposal(
 //         &proposer,
 //         &title,
 //         &description,
@@ -1093,13 +1089,13 @@ fn test_create_proposal_success() {
 //         &config,
 //     );
 
-//     client.take_snapshot(&proposal_id);
+//     governance_client.take_snapshot(&proposal_id);
 
-//     client.activate_proposal(&proposal_id);
-//     client.cast_vote(&proposal_id, &voter1, true, 6000); // For
-//     client.cast_vote(&proposal_id, &voter2, false, 4000); // Against
+//     governance_client.activate_proposal(&proposal_id);
+//     governance_client.cast_vote(&proposal_id, &voter1, true, 6000); // For
+//     governance_client.cast_vote(&proposal_id, &voter2, false, 4000); // Against
 
-//     env.as_contract(&contract_id, || {
+//     env.as_contract(&governance_id, || {
 //         let total_voting_power = VotingSystem::get_total_voting_power(&env, proposal_id);
 //         assert_eq!(total_voting_power, 10000, "Total voting power should be 10000");
 //         let for_votes = VotingSystem::get_for_votes(&env, proposal_id);
@@ -1116,8 +1112,8 @@ fn test_create_proposal_success() {
 //     let env = Env::default();
 //     env.mock_all_auths();
 
-//     let contract_id = env.register(GovernanceContract, ());
-//     let client = GovernanceContractClient::new(&env, &contract_id);
+//     let governance_id = env.register(GovernanceContract, ());
+//     let governance_client = GovernanceContractClient::new(&env, &governance_id);
 
 //     let admin = Address::generate(&env);
 //     let proposer = Address::generate(&env);
@@ -1133,7 +1129,7 @@ fn test_create_proposal_success() {
 //         one_address_one_vote: false,
 //     };
 
-//     client.initialize(&admin, &token_id, &referral_id, &auction, &config);
+//     governance_client.initialize(&admin, &token_id, &referral_id, &auction, &config);
 
 //     let token_client = MockTokenClient::new(&env, &token_id);
 //     token_client.set_balance(&proposer, 2000);
@@ -1151,7 +1147,7 @@ fn test_create_proposal_success() {
 //     let proposal_type = ProposalType::EconomicChange;
 //     let actions = vec![&env, Action::AppointModerator(proposer.clone())];
 
-//     let proposal_id = client.create_proposal(
+//     let proposal_id = governance_client.create_proposal(
 //         &proposer,
 //         &title,
 //         &description,
@@ -1161,12 +1157,12 @@ fn test_create_proposal_success() {
 //         &config,
 //     );
 
-//     client.take_snapshot(&proposal_id);
+//     governance_client.take_snapshot(&proposal_id);
 
-//     client.activate_proposal(&proposal_id);
-//     client.cast_vote(&proposal_id, &voter, true, 500);
+//     governance_client.activate_proposal(&proposal_id);
+//     governance_client.cast_vote(&proposal_id, &voter, true, 500);
 
-//     env.as_contract(&contract_id, || {
+//     env.as_contract(&governance_id, || {
 //         let total_voting_power = VotingSystem::get_total_voting_power(&env, proposal_id);
 //         assert_eq!(total_voting_power, 10000, "Total voting power should be 10000");
 //         let for_votes = VotingSystem::get_for_votes(&env, proposal_id);
@@ -1183,8 +1179,8 @@ fn test_create_proposal_success() {
 //     let env = Env::default();
 //     env.mock_all_auths();
 
-//     let contract_id = env.register(GovernanceContract, ());
-//     let client = GovernanceContractClient::new(&env, &contract_id);
+//     let governance_id = env.register(GovernanceContract, ());
+//     let governance_client = GovernanceContractClient::new(&env, &governance_id);
 
 //     let admin = Address::generate(&env);
 //     let delegator = Address::generate(&env);
@@ -1200,15 +1196,15 @@ fn test_create_proposal_success() {
 //         one_address_one_vote: false,
 //     };
 
-//     client.initialize(&admin, &token_id, &referral_id, &auction, &config);
+//     governance_client.initialize(&admin, &token_id, &referral_id, &auction, &config);
 
 //     let token_client = MockTokenClient::new(&env, &token_id);
 //     token_client.set_balance(&delegator, 2000);
 //     token_client.set_balance(&delegatee, 3000);
 
-//     client.delegate(&delegator, &delegatee);
+//     governance_client.delegate(&delegator, &delegatee);
 
-//     env.as_contract(&contract_id, || {
+//     env.as_contract(&governance_id, || {
 //         let delegation = WeightCalculator::get_delegation(&env, &delegator).unwrap();
 //         assert_eq!(delegation, delegatee, "Delegation should be set");
 //         let delegators = WeightCalculator::get_delegators(&env, &delegatee);
@@ -1231,7 +1227,7 @@ fn test_create_proposal_success() {
 //     assert_eq!(
 //         events.get_unchecked(events.len() - 1),
 //         (
-//             contract_id.clone(),
+//             governance_id.clone(),
 //             (symbol_short!("vote"), symbol_short!("delegated")).into_val(&env),
 //             (delegator.clone(), delegatee.clone()).into_val(&env)
 //         )
@@ -1243,8 +1239,8 @@ fn test_create_proposal_success() {
 //     let env = Env::default();
 //     env.mock_all_auths();
 
-//     let contract_id = env.register(GovernanceContract, ());
-//     let client = GovernanceContractClient::new(&env, &contract_id);
+//     let governance_id = env.register(GovernanceContract, ());
+//     let governance_client = GovernanceContractClient::new(&env, &governance_id);
 
 //     let admin = Address::generate(&env);
 //     let user = Address::generate(&env);
@@ -1259,16 +1255,16 @@ fn test_create_proposal_success() {
 //         one_address_one_vote: false,
 //     };
 
-//     client.initialize(&admin, &token_id, &referral_id, &auction, &config);
+//     governance_client.initialize(&admin, &token_id, &referral_id, &auction, &config);
 
-//     let result = client.try_delegate(&user, &user);
+//     let result = governance_client.try_delegate(&user, &user);
 //     assert_eq!(
 //         result,
 //         Err(Ok(Error::SelfDelegationNotAllowed)),
 //         "Expected SelfDelegationNotAllowed error"
 //     );
 
-//     env.as_contract(&contract_id, || {
+//     env.as_contract(&governance_id, || {
 //         let delegation = WeightCalculator::get_delegation(&env, &user);
 //         assert!(delegation.is_none(), "No delegation should be set");
 //     });
@@ -1279,8 +1275,8 @@ fn test_create_proposal_success() {
 //     let env = Env::default();
 //     env.mock_all_auths();
 
-//     let contract_id = env.register(GovernanceContract, ());
-//     let client = GovernanceContractClient::new(&env, &contract_id);
+//     let governance_id = env.register(GovernanceContract, ());
+//     let governance_client = GovernanceContractClient::new(&env, &governance_id);
 
 //     let admin = Address::generate(&env);
 //     let proposer = Address::generate(&env);
@@ -1295,7 +1291,7 @@ fn test_create_proposal_success() {
 //         one_address_one_vote: false,
 //     };
 
-//     client.initialize(&admin, &token_id, &referral_id, &auction, &config);
+//     governance_client.initialize(&admin, &token_id, &referral_id, &auction, &config);
 
 //     let token_client = MockTokenClient::new(&env, &token_id);
 //     token_client.set_balance(&proposer, 2000);
@@ -1309,7 +1305,7 @@ fn test_create_proposal_success() {
 //     let proposal_type = ProposalType::EconomicChange;
 //     let actions = vec![&env, Action::AppointModerator(proposer.clone())];
 
-//     let proposal_id = client.create_proposal(
+//     let proposal_id = governance_client.create_proposal(
 //         &proposer,
 //         &title,
 //         &description,
@@ -1319,18 +1315,18 @@ fn test_create_proposal_success() {
 //         &config,
 //     );
 
-//     let storage_snapshot = snapshot_instance_storage(&env, &contract_id);
+//     let storage_snapshot = snapshot_instance_storage(&env, &governance_id);
 
-//     client.get_proposal(&proposal_id);
-//     client.get_proposals_by_status(&ProposalStatus::Draft);
-//     client.get_for_votes(&proposal_id);
-//     client.get_against_votes(&proposal_id);
-//     client.get_total_votes(&proposal_id);
-//     client.get_voter_count(&proposal_id);
-//     client.get_total_voters();
-//     client.get_weight(&proposer, &proposal_id);
+//     governance_client.get_proposal(&proposal_id);
+//     governance_client.get_proposals_by_status(&ProposalStatus::Draft);
+//     governance_client.get_for_votes(&proposal_id);
+//     governance_client.get_against_votes(&proposal_id);
+//     governance_client.get_total_votes(&proposal_id);
+//     governance_client.get_voter_count(&proposal_id);
+//     governance_client.get_total_voters();
+//     governance_client.get_weight(&proposer, &proposal_id);
 
-//     let storage_snapshot_after = snapshot_instance_storage(&env, &contract_id);
+//     let storage_snapshot_after = snapshot_instance_storage(&env, &governance_id);
 //     assert_eq!(
 //         storage_snapshot, storage_snapshot_after,
 //         "Read-only functions should not modify storage"
@@ -1342,8 +1338,8 @@ fn test_create_proposal_success() {
 //     let env = Env::default();
 //     env.mock_all_auths();
 
-//     let contract_id = env.register(GovernanceContract, ());
-//     let client = GovernanceContractClient::new(&env, &contract_id);
+//     let governance_id = env.register(GovernanceContract, ());
+//     let governance_client = GovernanceContractClient::new(&env, &governance_id);
 
 //     let admin = Address::generate(&env);
 //     let proposer = Address::generate(&env);
@@ -1361,7 +1357,7 @@ fn test_create_proposal_success() {
 //         one_address_one_vote: false,
 //     };
 
-//     client.initialize(&admin, &token_id, &referral_id, &auction, &config);
+//     governance_client.initialize(&admin, &token_id, &referral_id, &auction, &config);
 
 //     let token_client = MockTokenClient::new(&env, &token_id);
 //     token_client.set_balance(&proposer, 2000);
@@ -1376,7 +1372,7 @@ fn test_create_proposal_success() {
 //     referral_client.set_user_level(&voter2, UserLevel::Platinum);
 //     referral_client.set_total_users(100);
 
-//     env.as_contract(&contract_id, || {
+//     env.as_contract(&governance_id, || {
 //         let mut moderators: Vec<Address> = vec![&env];
 //         moderators.push_back(moderator.clone());
 //         env.storage().instance().set(&MODERATOR_KEY, &moderators);
@@ -1389,7 +1385,7 @@ fn test_create_proposal_success() {
 //     let actions = vec![&env, Action::AppointModerator(proposer.clone())];
 
 //     // Create proposal
-//     let proposal_id = client.create_proposal(
+//     let proposal_id = governance_client.create_proposal(
 //         &proposer,
 //         &title,
 //         &description,
@@ -1401,14 +1397,14 @@ fn test_create_proposal_success() {
 //     assert_eq!(proposal_id, 1, "Proposal ID should be 1");
 
 //     // Take snapshot
-//     client.take_snapshot(&proposal_id);
+//     governance_client.take_snapshot(&proposal_id);
 
 //     // Activate proposal
-//     client.activate_proposal(&proposal_id);
+//     governance_client.activate_proposal(&proposal_id);
 
 //     // Cast votes
-//     client.cast_vote(&proposal_id, &voter1, true, 6000);
-//     client.cast_vote(&proposal_id, &voter2, false, 4000);
+//     governance_client.cast_vote(&proposal_id, &voter1, true, 6000);
+//     governance_client.cast_vote(&proposal_id, &voter2, false, 4000);
 
 //     // Advance time to end voting
 //     env.ledger().with_mut(|li| {
@@ -1416,29 +1412,29 @@ fn test_create_proposal_success() {
 //     });
 
 //     // Check voting ended
-//     env.as_contract(&contract_id, || {
+//     env.as_contract(&governance_id, || {
 //         let ended = VotingSystem::check_voting_ended(&env, proposal_id, &config).unwrap();
 //         assert!(ended, "Voting should have ended");
 //     });
 
 //     // Tally votes
-//     env.as_contract(&contract_id, || {
+//     env.as_contract(&governance_id, || {
 //         let passed = VotingSystem::tally_votes(&env, proposal_id, &config).unwrap();
 //         assert!(passed, "Proposal should pass");
 //     });
 
 //     // Mark passed
-//     client.mark_passed(&proposal_id);
+//     governance_client.mark_passed(&proposal_id);
 
 //     // Execute proposal
-//     client.mark_executed(&proposal_id);
+//     governance_client.mark_executed(&proposal_id);
 
-//     env.as_contract(&contract_id, || {
+//     env.as_contract(&governance_id, || {
 //         let proposal = ProposalManager::get_proposal(&env, proposal_id).unwrap();
 //         assert_eq!(proposal.status, ProposalStatus::Executed, "Status should be Executed");
 //     });
 
-//     let balance = token_client.get_balance(&proposer);
+//     let balance = token_client.balance(&proposer);
 //     assert_eq!(balance, 2000, "Stake should be returned");
 
 //     let events = env.events().all();
@@ -1450,8 +1446,8 @@ fn test_create_proposal_success() {
 // }
 
 // // Helper function to capture instance storage state
-// fn snapshot_instance_storage(env: &Env, contract_id: &Address) -> Map<Bytes, Bytes> {
-//     env.as_contract(contract_id, || {
+// fn snapshot_instance_storage(env: &Env, governance_id: &Address) -> Map<Bytes, Bytes> {
+//     env.as_contract(governance_id, || {
 //         let storage = env.storage().instance();
 //         let keys = map![
 //             env,
@@ -1499,6 +1495,101 @@ fn test_create_proposal_success() {
 // Mock Contracts
 
 #[contract]
+struct MockReferral;
+
+#[contractimpl]
+impl MockReferral {
+    pub fn set_user_verified(env: Env, user: Address, verified: bool) {
+        let mut data: Map<Address, bool> = env
+            .storage()
+            .instance()
+            .get(&Symbol::new(&env, "verified"))
+            .unwrap_or_else(|| Map::new(&env));
+        data.set(user.clone(), verified);
+        env.storage()
+            .instance()
+            .set(&Symbol::new(&env, "verified"), &data);
+        log!(&env, "Set verified: user={:?}, verified={}", user, verified);
+        // Self::set_total_users(env.clone(), Self::get_total_users(env) + 1);
+    }
+
+    pub fn is_user_verified(env: Env, user: Address) -> bool {
+        let data: Map<Address, bool> = env
+            .storage()
+            .instance()
+            .get(&Symbol::new(&env, "verified"))
+            .unwrap_or_else(|| Map::new(&env));
+        let result = data.get(user.clone()).unwrap_or(false);
+        log!(&env, "Is verified: user={:?}, result={}", user, result);
+        result
+    }
+
+    pub fn set_user_level(env: Env, user: Address, level: UserLevel) {
+        let mut data: Map<Address, UserLevel> = env
+            .storage()
+            .instance()
+            .get(&Symbol::new(&env, "levels"))
+            .unwrap_or_else(|| Map::new(&env));
+        data.set(user.clone(), level.clone());
+        env.storage()
+            .instance()
+            .set(&Symbol::new(&env, "levels"), &data);
+        log!(&env, "Set level: user={:?}, level={:?}", user, level);
+    }
+
+    pub fn get_user_level(env: Env, user: Address) -> Result<UserLevel, Error> {
+        let data: Map<Address, UserLevel> = env
+            .storage()
+            .instance()
+            .get(&Symbol::new(&env, "levels"))
+            .unwrap_or_else(|| Map::new(&env));
+        let result = data.get(user.clone()).ok_or(Error::UserLevelNotSet)?;
+        log!(&env, "Get level: user={:?}, level={:?}", user, result);
+        Ok(result)
+    }
+
+    pub fn set_total_users(env: Env, count: u32) {
+        env.storage()
+            .instance()
+            .set(&Symbol::new(&env, "total_users"), &count);
+        log!(&env, "Set total users: count={}", count);
+    }
+
+    pub fn get_total_users(env: Env) -> u32 {
+        let result: u32 = env
+            .storage()
+            .instance()
+            .get(&Symbol::new(&env, "total_users"))
+            .unwrap_or(0);
+        log!(&env, "Get total users: count={}", result);
+        result
+    }
+}
+
+#[contract]
+struct MockAuction;
+
+#[contractimpl]
+impl MockAuction {
+    pub fn set_auction(env: Env, auction: Address) {
+        env.storage()
+            .instance()
+            .set(&Symbol::new(&env, "auction"), &auction);
+        log!(&env, "Set auction: auction={:?}", auction);
+    }
+
+    pub fn get_auction(env: Env) -> Address {
+        let result: Address = env
+            .storage()
+            .instance()
+            .get(&Symbol::new(&env, "auction"))
+            .unwrap_or(Address::generate(&env));
+        log!(&env, "Get auction: auction={:?}", result);
+        result
+    }
+}
+
+#[contract]
 struct MockToken;
 
 #[contractimpl]
@@ -1516,7 +1607,7 @@ impl MockToken {
         log!(&env, "Set balance: addr={:?}, amount={}", addr, amount);
     }
 
-    pub fn get_balance(env: Env, addr: Address) -> i128 {
+    pub fn balance(env: Env, addr: Address) -> i128 {
         let balances: Map<Address, i128> = env
             .storage()
             .instance()
@@ -1567,82 +1658,5 @@ impl MockToken {
             .instance()
             .set(&Symbol::new(&env, "balances"), &balances);
         log!(&env, "Burn: from={:?}, amount={}", from, amount);
-    }
-}
-
-#[contract]
-struct MockReferral;
-
-#[contractimpl]
-impl MockReferral {
-    pub fn set_user_verified(env: Env, user: Address, verified: bool) {
-        let mut data: Map<Address, bool> = env
-            .storage()
-            .instance()
-            .get(&Symbol::new(&env, "verified"))
-            .unwrap_or_else(|| Map::new(&env));
-        data.set(user.clone(), verified);
-        env.storage()
-            .instance()
-            .set(&Symbol::new(&env, "verified"), &data);
-        log!(&env, "Set verified: user={:?}, verified={}", user, verified);
-    }
-
-    pub fn is_user_verified(env: Env, user: Address) -> bool {
-        let data: Map<Address, bool> = env
-            .storage()
-            .instance()
-            .get(&Symbol::new(&env, "verified"))
-            .unwrap_or_else(|| Map::new(&env));
-        let result = data.get(user.clone()).unwrap_or(false);
-        let key = Symbol::new(&env, &format!("VERIFIED_{:?}", user));
-        env.storage().instance().set(&key, &result);
-        log!(&env, "Is verified: user={:?}, result={}", user, result);
-        result
-    }
-
-    pub fn set_user_level(env: Env, user: Address, level: UserLevel) {
-        let mut data: Map<Address, UserLevel> = env
-            .storage()
-            .instance()
-            .get(&Symbol::new(&env, "levels"))
-            .unwrap_or_else(|| Map::new(&env));
-        data.set(user.clone(), level.clone());
-        env.storage()
-            .instance()
-            .set(&Symbol::new(&env, "levels"), &data);
-        log!(&env, "Set level: user={:?}, level={:?}", user, level);
-    }
-
-    pub fn get_user_level(env: Env, user: Address) -> UserLevel {
-        let data: Map<Address, UserLevel> = env
-            .storage()
-            .instance()
-            .get(&Symbol::new(&env, "levels"))
-            .unwrap_or_else(|| Map::new(&env));
-        let result = data.get(user.clone()).unwrap_or(UserLevel::Basic);
-        let key = Symbol::new(&env, &format!("LEVEL_{:?}", user));
-        env.storage().instance().set(&key, &result);
-        log!(&env, "Get level: user={:?}, level={:?}", user, result);
-        result
-    }
-
-    pub fn set_total_users(env: Env, count: u32) {
-        env.storage()
-            .instance()
-            .set(&Symbol::new(&env, "total_users"), &count);
-        log!(&env, "Set total users: count={}", count);
-    }
-
-    pub fn get_total_users(env: Env) -> u32 {
-        let result: u32 = env
-            .storage()
-            .instance()
-            .get(&Symbol::new(&env, "total_users"))
-            .unwrap_or(0);
-        let key = Symbol::new(&env, "total_users");
-        env.storage().instance().set(&key, &result);
-        log!(&env, "Get total users: count={}", result);
-        result
     }
 }
