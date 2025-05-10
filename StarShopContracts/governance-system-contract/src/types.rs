@@ -1,95 +1,104 @@
 use soroban_sdk::{contracterror, contracttype, symbol_short, Address, String, Symbol, Vec};
 
+// Enum representing the status of a proposal
 #[contracttype]
 #[derive(Clone, Debug, PartialEq)]
 pub enum ProposalStatus {
-    Draft = 0,
-    Active = 1,
-    Passed = 2,
-    Rejected = 3,
-    Executed = 4,
-    Canceled = 5,
-    Vetoed = 6,
+    Draft = 0,    // Proposal is in draft state
+    Active = 1,   // Proposal is active and open for voting
+    Passed = 2,   // Proposal has passed voting
+    Rejected = 3, // Proposal has been rejected
+    Executed = 4, // Proposal has been executed
+    Canceled = 5, // Proposal has been canceled
+    Vetoed = 6,   // Proposal has been vetoed
 }
 
+// Enum representing the type of a proposal
 #[contracttype]
 #[derive(Clone, Debug, PartialEq)]
 pub enum ProposalType {
-    FeatureRequest = 0,
-    PolicyChange = 1,
-    ParameterChange = 2,
-    ContractUpgrade = 3,
-    EmergencyAction = 4,
-    EconomicChange = 5,
+    FeatureRequest = 0,  // Request for a new feature
+    PolicyChange = 1,    // Change in policy
+    ParameterChange = 2, // Change in parameters
+    ContractUpgrade = 3, // Upgrade to the contract
+    EmergencyAction = 4, // Emergency action
+    EconomicChange = 5,  // Economic change
 }
 
+// Struct representing a proposal
 #[contracttype]
 #[derive(Clone, Debug, PartialEq)]
 pub struct Proposal {
-    pub id: u32,
-    pub proposer: Address,
-    pub title: Symbol,
-    pub description: Symbol,
-    pub metadata_hash: String,
-    pub proposal_type: ProposalType,
-    pub status: ProposalStatus,
-    pub created_at: u64,
-    pub activated_at: u64,
-    pub voting_config: VotingConfig,
-    pub actions: Vec<Action>,
+    pub id: u32,                     // Unique ID of the proposal
+    pub proposer: Address,           // Address of the proposer
+    pub title: Symbol,               // Title of the proposal
+    pub description: Symbol,         // Description of the proposal
+    pub metadata_hash: String,       // Metadata hash for the proposal
+    pub proposal_type: ProposalType, // Type of the proposal
+    pub status: ProposalStatus,      // Current status of the proposal
+    pub created_at: u64,             // Timestamp when the proposal was created
+    pub activated_at: u64,           // Timestamp when the proposal was activated
+    pub voting_config: VotingConfig, // Voting configuration for the proposal
+    pub actions: Vec<Action>,        // Actions associated with the proposal
 }
 
+// Struct representing the requirements for a proposal
 #[contracttype]
 #[derive(Clone, Debug, PartialEq)]
 pub struct ProposalRequirements {
-    pub cooldown_period: u64,
-    pub required_stake: i128,
-    pub proposal_limit: u32,
-    pub max_voting_power: i128,
+    pub cooldown_period: u64, // Cooldown period before creating another proposal
+    pub required_stake: i128, // Stake required to create a proposal
+    pub proposal_limit: u32,  // Maximum number of proposals allowed
+    pub max_voting_power: i128, // Maximum voting power allowed
 }
 
+// Struct representing a vote
 #[contracttype]
 #[derive(Clone, Debug, PartialEq)]
 pub struct Vote {
-    pub voter: Address,
-    pub support: bool,
-    pub weight: i128,
-    pub timestamp: u64,
+    pub voter: Address, // Address of the voter
+    pub support: bool,  // Whether the vote is in support of the proposal
+    pub weight: i128,   // Weight of the vote
+    pub timestamp: u64, // Timestamp when the vote was cast
 }
 
+// Struct representing the voting configuration
 #[contracttype]
 #[derive(Clone, Debug, PartialEq)]
 pub struct VotingConfig {
-    pub duration: u64,
-    pub quorum: u128,
-    pub threshold: u128,
-    pub execution_delay: u64,
-    pub one_address_one_vote: bool,
+    pub duration: u64,              // Duration of the voting period
+    pub quorum: u128,               // Minimum quorum required for the proposal to pass
+    pub threshold: u128,            // Minimum threshold required for the proposal to pass
+    pub execution_delay: u64,       // Delay before the proposal can be executed
+    pub one_address_one_vote: bool, // Whether each address gets one vote
 }
 
+// Struct representing a snapshot of weights
 #[contracttype]
 #[derive(Clone, Debug, PartialEq)]
 pub struct WeightSnapshot {
-    pub proposal_id: u32,
-    pub snapshot_at: u64,
+    pub proposal_id: u32, // ID of the proposal
+    pub snapshot_at: u64, // Timestamp when the snapshot was taken
 }
 
+// Struct representing a moderator
 #[contracttype]
 #[derive(Clone, Debug, PartialEq)]
 pub struct Moderator {
-    pub address: Address,
-    pub appointed_at: u64,
+    pub address: Address,  // Address of the moderator
+    pub appointed_at: u64, // Timestamp when the moderator was appointed
 }
 
+// Enum representing actions that can be performed
 #[contracttype]
 #[derive(Clone, Debug, PartialEq)]
 pub enum Action {
-    UpdateProposalRequirements(ProposalRequirements),
-    AppointModerator(Address),
-    RemoveModerator(Address),
-    UpdateRewardRates(RewardRates),
-    UpdateLevelRequirements(LevelRequirements),
-    UpdateAuctionConditions(u32, AuctionConditions),
+    UpdateProposalRequirements(ProposalRequirements), // Update proposal requirements
+    AppointModerator(Address),                        // Appoint a new moderator
+    RemoveModerator(Address),                         // Remove an existing moderator
+    UpdateRewardRates(RewardRates),                   // Update reward rates
+    UpdateLevelRequirements(LevelRequirements),       // Update level requirements
+    UpdateAuctionConditions(u32, AuctionConditions),  // Update auction conditions
 }
 
 // Custom Errors
@@ -97,32 +106,33 @@ pub enum Action {
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 #[repr(u32)]
 pub enum Error {
-    AlreadyInitialized = 1,
-    NotInitialized = 2,
-    Unauthorized = 3,
-    ProposalNotFound = 101,
-    InvalidProposalStatus = 102,
-    NotEligibleToPropose = 103,
-    ProposalInCooldown = 104,
-    InsufficientStake = 105,
-    InvalidProposalType = 106,
-    ProposalLimitReached = 107,
-    ProposalNotActive = 201,
-    AlreadyVoted = 202,
-    NoVotingPower = 203,
-    InvalidVotingPeriod = 204,
-    InvalidDelegation = 301,
-    SelfDelegationNotAllowed = 302,
-    ProposalNotExecutable = 401,
-    ExecutionFailed = 402,
-    ExecutionDelayNotMet = 403,
-    InvalidAction = 404,
-    NotVerified = 501,
-    UserLevelNotSet = 502,
-    InsufficientReferralLevel = 503,
-    ModeratorNotFound = 601,
-    AlreadyModerator = 602,
-    ContractCallFailed = 701,
+    AlreadyInitialized = 1,          // Contract is already initialized
+    NotInitialized = 2,              // Contract is not initialized
+    Unauthorized = 3,                // Unauthorized action
+    ProposalNotFound = 101,          // Proposal not found
+    InvalidProposalStatus = 102,     // Invalid proposal status
+    NotEligibleToPropose = 103,      // Not eligible to propose
+    ProposalInCooldown = 104,        // Proposal is in cooldown period
+    InsufficientStake = 105,         // Insufficient stake to create a proposal
+    InvalidProposalType = 106,       // Invalid proposal type
+    ProposalLimitReached = 107,      // Proposal limit reached
+    InvalidProposalInput = 108,      // Invalid proposal input
+    ProposalNotActive = 201,         // Proposal is not active
+    AlreadyVoted = 202,              // Voter has already voted
+    NoVotingPower = 203,             // No voting power available
+    InvalidVotingPeriod = 204,       // Invalid voting period
+    InvalidDelegation = 301,         // Invalid delegation
+    SelfDelegationNotAllowed = 302,  // Self-delegation is not allowed
+    ProposalNotExecutable = 401,     // Proposal is not executable
+    ExecutionFailed = 402,           // Execution of the proposal failed
+    ExecutionDelayNotMet = 403,      // Execution delay not met
+    InvalidAction = 404,             // Invalid action
+    NotVerified = 501,               // User is not verified
+    UserLevelNotSet = 502,           // User level is not set
+    InsufficientReferralLevel = 503, // Insufficient referral level
+    ModeratorNotFound = 601,         // Moderator not found
+    AlreadyModerator = 602,          // Address is already a moderator
+    ContractCallFailed = 701,        // Contract call failed
 }
 
 // Constants
