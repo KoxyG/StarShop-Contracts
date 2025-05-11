@@ -6,7 +6,7 @@ use crate::types::{
 };
 use crate::voting::VotingSystem;
 use crate::weights::WeightCalculator;
-use soroban_sdk::{contract, contractimpl, log, symbol_short, Address, Env, String, Symbol, Vec};
+use soroban_sdk::{contract, contractimpl, symbol_short, Address, Env, String, Symbol, Vec};
 
 /// Main contract for the governance system
 /// Handles all governance-related operations including proposal management,
@@ -244,13 +244,6 @@ impl GovernanceContract {
             return Err(Error::ProposalNotActive);
         }
 
-        log!(
-            &env,
-            "gov Casting vote: voter={}, proposal_id={}, support={}",
-            voter,
-            proposal_id,
-            support
-        );
         // Calculate voting weight based on configuration
         let weight = if proposal.voting_config.one_address_one_vote {
             // One address, one vote mode
@@ -259,13 +252,6 @@ impl GovernanceContract {
             // Weighted voting based on token holdings and delegations
             WeightCalculator::get_weight(&env, &voter, proposal_id)?
         };
-        log!(
-            &env,
-            "gov Vote weight calculated: voter={}, proposal_id={}, weight={}",
-            voter,
-            proposal_id,
-            weight
-        );
 
         // Ensure voter has voting power
         if weight <= 0 {
@@ -282,24 +268,8 @@ impl GovernanceContract {
             }
         }
 
-        log!(
-            &env,
-            "gov Casting vote: voter={}, proposal_id={}, support={}, weight={}",
-            voter,
-            proposal_id,
-            support,
-            weight
-        );
         // Cast the vote
         VotingSystem::cast_vote(&env, proposal_id, &voter, support, weight)?;
-        log!(
-            &env,
-            "gov Vote cast successfully: voter={}, proposal_id={}, support={}, weight={}",
-            voter,
-            proposal_id,
-            support,
-            weight
-        );
         Ok(())
     }
 

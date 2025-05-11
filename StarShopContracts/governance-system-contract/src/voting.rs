@@ -1,7 +1,7 @@
 use crate::proposals::ProposalManager;
 use crate::types::{Error, ProposalType, UserLevel, Vote, VotingConfig, REFERRAL_KEY};
 use crate::utils::{get_key_str, get_governance_op_key};
-use soroban_sdk::{log, symbol_short, vec, Address, Bytes, Env, IntoVal, Symbol, Vec};
+use soroban_sdk::{symbol_short, vec, Address, Bytes, Env, IntoVal, Symbol, Vec};
 
 /// VotingSystem handles all vote-related operations for the governance system
 /// Including casting votes, tallying results, and checking voting status
@@ -64,7 +64,6 @@ impl VotingSystem {
         if env.storage().instance().has(&key) {
             return Err(Error::AlreadyVoted);
         }
-        log!(&env, "vote Voter {} has not voted yet", voter);
         
         // Create a new vote and store it
         let vote = Vote {
@@ -74,7 +73,6 @@ impl VotingSystem {
             timestamp: env.ledger().timestamp(),
         };
         env.storage().instance().set(&key, &vote);
-        log!(&env, "Vote stored for voter {}", voter);
 
         // Update vote totals
         Self::update_vote_totals(env, proposal_id, support, vote.weight);
@@ -122,7 +120,6 @@ impl VotingSystem {
         let mut total_votes: u128 = env.storage().instance().get(&key_total).unwrap_or(0);
         let mut voter_count: u128 = env.storage().instance().get(&key_voter_count).unwrap_or(0);
 
-        log!(&env, "vote for_votes: {}, against_votes: {}, total_votes: {}, voter_count: {}", for_votes, against_votes, total_votes, voter_count);
         // Update vote totals based on support
         if support {
             for_votes += weight as u128;
@@ -131,7 +128,6 @@ impl VotingSystem {
         }
         total_votes += weight as u128;
         voter_count += 1;
-        log!(&env, "vote for_votes: {}, against_votes: {}, total_votes: {}, voter_count: {}", for_votes, against_votes, total_votes, voter_count);
 
         // Store updated vote totals
         env.storage().instance().set(&key_for, &for_votes);
@@ -192,7 +188,6 @@ impl VotingSystem {
             // Handle weighted voting mode
             let total_votes = Self::get_total_votes(env, proposal_id);
             let total_voting_power = Self::get_total_voting_power(env, proposal_id);
-            log!(&env, "vote total_votes: {}, total_voting_power: {}", total_votes, total_voting_power);
 
             // Check if quorum has been reached (vote weight as percentage * 10000)
             if total_votes * 10000 / total_voting_power as u128 >= config.quorum {
@@ -231,7 +226,6 @@ impl VotingSystem {
             if voter_count * 10000 / total_voters < config.quorum {
                 return Ok(false);
             }
-            log!(&env, "vote Voter count: {}, Total voters: {}", voter_count, total_voters);
 
             // Check threshold
             let for_votes = Self::get_for_votes(env, proposal_id);
@@ -239,13 +233,11 @@ impl VotingSystem {
             if for_votes * 10000 / total_votes >= config.threshold {
                 return Ok(true);
             }
-            log!(&env, "vote For votes: {}, Total votes: {}", for_votes, total_votes);
         } else {
             // Check quorum and threshold in weighted voting mode
             let for_votes = Self::get_for_votes(env, proposal_id);
             let total_votes = Self::get_total_votes(env, proposal_id);
             let total_voting_power = Self::get_total_voting_power(env, proposal_id);
-            log!(&env, "vote 2 total_votes: {}, total_voting_power: {}", total_votes, total_voting_power);
 
             if (total_votes * 10000 / total_voting_power as u128) < config.quorum {
                 return Ok(false);

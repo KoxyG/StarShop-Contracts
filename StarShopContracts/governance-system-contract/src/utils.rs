@@ -1,4 +1,4 @@
-use soroban_sdk::{log, xdr::ToXdr, Address, Bytes, Env, IntoVal, Symbol, Val};
+use soroban_sdk::{xdr::ToXdr, Address, Bytes, Env, IntoVal, Symbol, Val};
 
 /// Generate a storage key for a user
 ///
@@ -54,7 +54,6 @@ pub fn get_governance_op_key(
     // Convert the address to bytes
     let val: Val = addr.clone().into_val(env);
     let xdr_bytes = val.to_xdr(env);
-    log!(&env, "xdr bytes", xdr_bytes);
 
     // Convert each byte to hex
     let mut hex_chars = Bytes::new(env);
@@ -66,7 +65,6 @@ pub fn get_governance_op_key(
         hex_chars.push_back(high_char);
         hex_chars.push_back(low_char);
     }
-    log!(&env, "hexchars", hex_chars);
 
     // Append the proposal ID and hex characters to the key
     if proposal_id == 0 {
@@ -120,17 +118,12 @@ pub fn get_governance_op_key(
     
     // Convert the key bytes to a string
     let len = truncated.len() as usize;
-    log!(&env, "Key length: {:?}", len as u32);
     let mut buffer = [0u8; 89];
     for i in 0..len {
         // Copy the key bytes into the buffer
         buffer[i] = truncated.get(i as u32).unwrap();
     }
-    log!(&env, "key bytes", truncated);
-    log!(&env, "buffer", buffer);
 
     let key = unsafe { core::str::from_utf8_unchecked(&buffer[..32]) };
-
-    log!(&env, "Final key: {:?}", key);
     Symbol::new(env, &key)
 }

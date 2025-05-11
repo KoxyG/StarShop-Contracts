@@ -1,6 +1,5 @@
 use crate::types::{Error, ProposalRequirements, WeightSnapshot, REFERRAL_KEY, REQUIREMENTS_KEY, TOKEN_KEY};
 use crate::utils::{get_governance_op_key, get_key_str};
-use soroban_sdk::log;
 use soroban_sdk::{
     symbol_short, token::TokenClient, vec, Address,
     Bytes, Env, Symbol, Vec,
@@ -74,12 +73,6 @@ impl WeightCalculator {
     /// # Returns
     /// * `Result<i128, Error>` - The voting weight or an error
     pub fn get_weight(env: &Env, voter: &Address, proposal_id: u32) -> Result<i128, Error> {
-        log!(
-            env,
-            "weg get_weight: voter {:?}, proposal_id {:?}",
-            voter,
-            proposal_id
-        );
         // Check if this voter has delegated their voting power
         if let Some(_delegatee) = Self::get_delegation(env, voter) {
             // If they delegated, they have zero voting power themselves
@@ -90,11 +83,6 @@ impl WeightCalculator {
         let requirements: ProposalRequirements =
             env.storage().instance().get(&REQUIREMENTS_KEY).unwrap();
 
-        log!(
-            env,
-            "weg get_weight: requirements {:?}",
-            requirements
-        );
         // Calculate base weight from token balance
         let base_weight = Self::get_base_weight(env, voter);
 
@@ -195,7 +183,6 @@ impl WeightCalculator {
     /// * `Option<Address>` - The delegatee if delegation exists
     pub fn get_delegation(env: &Env, delegator: &Address) -> Option<Address> {
         let key = Self::get_delegator_key(env, delegator);
-        log!(&env, "weg KEYYYYYYYYY", key);
         env.storage().instance().get(&key)
     }
 
@@ -239,7 +226,6 @@ impl WeightCalculator {
     fn get_delegator_key(env: &Env, delegator: &Address) -> Symbol {
         // Generate a unique key for the delegator's delegation
         let key_bytes = Bytes::from_slice(env, b"DELGOR_");
-        log!(env, "weg get_delegator_key: key_bytes {:?}", key_bytes);
         get_governance_op_key(env, key_bytes.clone(), 0, delegator)
     }
 
