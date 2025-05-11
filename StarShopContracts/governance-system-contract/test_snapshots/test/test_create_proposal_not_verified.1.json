@@ -119,7 +119,7 @@
                 {
                   "i128": {
                     "hi": 0,
-                    "lo": 2000
+                    "lo": 1000
                   }
                 }
               ]
@@ -130,126 +130,6 @@
       ]
     ],
     [],
-    [],
-    [
-      [
-        "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM",
-        {
-          "function": {
-            "contract_fn": {
-              "contract_address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
-              "function_name": "create_proposal",
-              "args": [
-                {
-                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM"
-                },
-                {
-                  "symbol": "TestProp"
-                },
-                {
-                  "symbol": "Descr"
-                },
-                {
-                  "string": "hash123"
-                },
-                {
-                  "u32": 5
-                },
-                {
-                  "vec": [
-                    {
-                      "vec": [
-                        {
-                          "symbol": "AppointModerator"
-                        },
-                        {
-                          "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM"
-                        }
-                      ]
-                    }
-                  ]
-                },
-                {
-                  "map": [
-                    {
-                      "key": {
-                        "symbol": "duration"
-                      },
-                      "val": {
-                        "u64": 86400
-                      }
-                    },
-                    {
-                      "key": {
-                        "symbol": "execution_delay"
-                      },
-                      "val": {
-                        "u64": 3600
-                      }
-                    },
-                    {
-                      "key": {
-                        "symbol": "one_address_one_vote"
-                      },
-                      "val": {
-                        "bool": false
-                      }
-                    },
-                    {
-                      "key": {
-                        "symbol": "quorum"
-                      },
-                      "val": {
-                        "u128": {
-                          "hi": 0,
-                          "lo": 1000
-                        }
-                      }
-                    },
-                    {
-                      "key": {
-                        "symbol": "threshold"
-                      },
-                      "val": {
-                        "u128": {
-                          "hi": 0,
-                          "lo": 5000
-                        }
-                      }
-                    }
-                  ]
-                }
-              ]
-            }
-          },
-          "sub_invocations": [
-            {
-              "function": {
-                "contract_fn": {
-                  "contract_address": "CACMVW2KK4H5FZDFF2AUCAKQTEJMZZWJUIZF23XMRVYQBSXYLHZ6BKWN",
-                  "function_name": "transfer",
-                  "args": [
-                    {
-                      "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM"
-                    },
-                    {
-                      "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM"
-                    },
-                    {
-                      "i128": {
-                        "hi": 0,
-                        "lo": 1000
-                      }
-                    }
-                  ]
-                }
-              },
-              "sub_invocations": []
-            }
-          ]
-        }
-      ]
-    ],
     [],
     []
   ],
@@ -423,162 +303,7 @@
                           "symbol": "PCNT"
                         },
                         "val": {
-                          "u32": 1
-                        }
-                      },
-                      {
-                        "key": {
-                          "symbol": "PROP_1"
-                        },
-                        "val": {
-                          "map": [
-                            {
-                              "key": {
-                                "symbol": "actions"
-                              },
-                              "val": {
-                                "vec": [
-                                  {
-                                    "vec": [
-                                      {
-                                        "symbol": "AppointModerator"
-                                      },
-                                      {
-                                        "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM"
-                                      }
-                                    ]
-                                  }
-                                ]
-                              }
-                            },
-                            {
-                              "key": {
-                                "symbol": "activated_at"
-                              },
-                              "val": {
-                                "u64": 0
-                              }
-                            },
-                            {
-                              "key": {
-                                "symbol": "created_at"
-                              },
-                              "val": {
-                                "u64": 0
-                              }
-                            },
-                            {
-                              "key": {
-                                "symbol": "description"
-                              },
-                              "val": {
-                                "symbol": "Descr"
-                              }
-                            },
-                            {
-                              "key": {
-                                "symbol": "id"
-                              },
-                              "val": {
-                                "u32": 1
-                              }
-                            },
-                            {
-                              "key": {
-                                "symbol": "metadata_hash"
-                              },
-                              "val": {
-                                "string": "hash123"
-                              }
-                            },
-                            {
-                              "key": {
-                                "symbol": "proposal_type"
-                              },
-                              "val": {
-                                "u32": 5
-                              }
-                            },
-                            {
-                              "key": {
-                                "symbol": "proposer"
-                              },
-                              "val": {
-                                "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM"
-                              }
-                            },
-                            {
-                              "key": {
-                                "symbol": "status"
-                              },
-                              "val": {
-                                "u32": 0
-                              }
-                            },
-                            {
-                              "key": {
-                                "symbol": "title"
-                              },
-                              "val": {
-                                "symbol": "TestProp"
-                              }
-                            },
-                            {
-                              "key": {
-                                "symbol": "voting_config"
-                              },
-                              "val": {
-                                "map": [
-                                  {
-                                    "key": {
-                                      "symbol": "duration"
-                                    },
-                                    "val": {
-                                      "u64": 86400
-                                    }
-                                  },
-                                  {
-                                    "key": {
-                                      "symbol": "execution_delay"
-                                    },
-                                    "val": {
-                                      "u64": 3600
-                                    }
-                                  },
-                                  {
-                                    "key": {
-                                      "symbol": "one_address_one_vote"
-                                    },
-                                    "val": {
-                                      "bool": false
-                                    }
-                                  },
-                                  {
-                                    "key": {
-                                      "symbol": "quorum"
-                                    },
-                                    "val": {
-                                      "u128": {
-                                        "hi": 0,
-                                        "lo": 1000
-                                      }
-                                    }
-                                  },
-                                  {
-                                    "key": {
-                                      "symbol": "threshold"
-                                    },
-                                    "val": {
-                                      "u128": {
-                                        "hi": 0,
-                                        "lo": 5000
-                                      }
-                                    }
-                                  }
-                                ]
-                              }
-                            }
-                          ]
+                          "u32": 0
                         }
                       },
                       {
@@ -641,11 +366,7 @@
                           "symbol": "STAT_0"
                         },
                         "val": {
-                          "vec": [
-                            {
-                              "u32": 1
-                            }
-                          ]
+                          "vec": []
                         }
                       },
                       {
@@ -769,7 +490,7 @@
                                 "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM"
                               },
                               "val": {
-                                "bool": true
+                                "bool": false
                               }
                             }
                           ]
@@ -881,112 +602,6 @@
             "ext": "v0"
           },
           6311999
-        ]
-      ],
-      [
-        {
-          "contract_data": {
-            "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM",
-            "key": {
-              "ledger_key_nonce": {
-                "nonce": 4837995959683129791
-              }
-            },
-            "durability": "temporary"
-          }
-        },
-        [
-          {
-            "last_modified_ledger_seq": 0,
-            "data": {
-              "contract_data": {
-                "ext": "v0",
-                "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM",
-                "key": {
-                  "ledger_key_nonce": {
-                    "nonce": 4837995959683129791
-                  }
-                },
-                "durability": "temporary",
-                "val": "void"
-              }
-            },
-            "ext": "v0"
-          },
-          6311999
-        ]
-      ],
-      [
-        {
-          "contract_data": {
-            "contract": "CACMVW2KK4H5FZDFF2AUCAKQTEJMZZWJUIZF23XMRVYQBSXYLHZ6BKWN",
-            "key": {
-              "vec": [
-                {
-                  "symbol": "Balance"
-                },
-                {
-                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM"
-                }
-              ]
-            },
-            "durability": "persistent"
-          }
-        },
-        [
-          {
-            "last_modified_ledger_seq": 0,
-            "data": {
-              "contract_data": {
-                "ext": "v0",
-                "contract": "CACMVW2KK4H5FZDFF2AUCAKQTEJMZZWJUIZF23XMRVYQBSXYLHZ6BKWN",
-                "key": {
-                  "vec": [
-                    {
-                      "symbol": "Balance"
-                    },
-                    {
-                      "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM"
-                    }
-                  ]
-                },
-                "durability": "persistent",
-                "val": {
-                  "map": [
-                    {
-                      "key": {
-                        "symbol": "amount"
-                      },
-                      "val": {
-                        "i128": {
-                          "hi": 0,
-                          "lo": 1000
-                        }
-                      }
-                    },
-                    {
-                      "key": {
-                        "symbol": "authorized"
-                      },
-                      "val": {
-                        "bool": true
-                      }
-                    },
-                    {
-                      "key": {
-                        "symbol": "clawback"
-                      },
-                      "val": {
-                        "bool": false
-                      }
-                    }
-                  ]
-                }
-              }
-            },
-            "ext": "v0"
-          },
-          518400
         ]
       ],
       [
