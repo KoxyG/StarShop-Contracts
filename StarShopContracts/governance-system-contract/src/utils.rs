@@ -44,7 +44,14 @@ pub fn get_key_str(env: &Env, mut key_bytes: Bytes, key_num: u32) -> Symbol {
     Symbol::new(env, &key)
 }
 
-/// Generate a unique key for the vote specification
+/// Generate a unique key for the vote specification (proposal, status, vote, delegation)
+///
+/// * Arguments
+/// * `env` - The environment object
+/// * `key_bytes` - The base key bytes
+/// * `proposal_id` - The proposal ID
+/// * `addr` - The address of the user
+///
 pub fn get_governance_op_key(
     env: &Env,
     mut key_bytes: Bytes,

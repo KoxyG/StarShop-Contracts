@@ -135,6 +135,7 @@
     [],
     [],
     [],
+    [],
     [
       [
         "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM",
@@ -875,7 +876,7 @@
                         "val": {
                           "i128": {
                             "hi": 0,
-                            "lo": 100000
+                            "lo": 10000
                           }
                         }
                       },
@@ -961,7 +962,7 @@
                           "symbol": "total_users"
                         },
                         "val": {
-                          "u32": 100
+                          "u32": 10
                         }
                       },
                       {

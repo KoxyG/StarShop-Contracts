@@ -22,6 +22,7 @@ const QUORUM: u128 = 1000;
 const THRESHOLD: u128 = 5000;
 const EXECUTION_DELAY: u64 = 3600;
 
+/// Create a test environment with the necessary contracts and clients.
 fn create_test_contracts(
     env: &Env,
 ) -> (
@@ -46,6 +47,7 @@ fn create_test_contracts(
     )
 }
 
+/// Setup arguments for initializing governance contract
 fn setup_governance_args(env: &Env) -> (Address, Address, VotingConfig) {
     let admin = Address::generate(&env);
     let proposer = Address::generate(&env);
@@ -60,6 +62,7 @@ fn setup_governance_args(env: &Env) -> (Address, Address, VotingConfig) {
     (admin, proposer, default_config)
 }
 
+/// Create Stellar Asset Token Admin and Client contracts
 fn create_token_contracts<'a>(
     env: &'a Env,
     admin: &'a Address,
@@ -71,6 +74,7 @@ fn create_token_contracts<'a>(
     (token_id, token_admin, token_client)
 }
 
+/// Setup arguments for creatig a proposal
 fn setup_proposal_args(
     env: &Env,
     proposer: &Address,
@@ -84,11 +88,21 @@ fn setup_proposal_args(
     (title, description, metadata_hash, proposal_type, actions)
 }
 
+/// Mark user verified status as true and set referral status to highest level
+fn verify_user_and_set_status(ref_client: MockReferralClient, users: Vec<Address>) {
+    for user in users.iter() {
+        ref_client.set_user_verified(&user, &true);
+        ref_client.set_user_level(&user, &UserLevel::Platinum);
+        ref_client.set_total_users(&10);
+    }
+}
+
 #[test]
 fn test_initialization() {
     let env = Env::default();
     env.mock_all_auths();
 
+    // Create governance client and initialize
     let governance_id = env.register(GovernanceContract, ());
     let governance_client = GovernanceContractClient::new(&env, &governance_id);
 
@@ -106,6 +120,7 @@ fn test_initialization() {
 
     governance_client.initialize(&admin, &token, &referral, &auction, &config);
 
+    // Compare governance state variables after initialization
     env.as_contract(&governance_id, || {
         let stored_admin: Address = env.storage().instance().get(&ADMIN_KEY).unwrap();
         let stored_token: Address = env.storage().instance().get(&TOKEN_KEY).unwrap();
@@ -161,6 +176,7 @@ fn test_initialize_already_initialized() {
     let env = Env::default();
     env.mock_all_auths();
 
+    // Create governance client and initialize
     let governance_id = env.register(GovernanceContract, ());
     let governance_client = GovernanceContractClient::new(&env, &governance_id);
 
@@ -176,6 +192,7 @@ fn test_initialize_already_initialized() {
         one_address_one_vote: false,
     };
 
+    // Initializing governance contract a second time should throw an error
     governance_client.initialize(&admin, &token, &referral, &auction, &config);
     let result = governance_client.try_initialize(&admin, &token, &referral, &auction, &config);
     assert_eq!(
@@ -226,9 +243,7 @@ fn test_create_proposal_success() {
     // Set token balance and referral status
     log!(&env, "Setting token balance and referral status");
     token_admin.mint(&proposer, &2000);
-    // token_client.approve(&proposer, &governance_id, &2000, &1000);
-    referral_client.set_user_verified(&proposer, &true);
-    referral_client.set_user_level(&proposer, &UserLevel::Platinum);
+    verify_user_and_set_status(referral_client, vec![&env, proposer.clone()]);
 
     // Create proposal
     log!(&env, "Creating proposal");
@@ -290,8 +305,7 @@ fn test_create_proposal_insufficient_stake() {
 
     // Set token balance and referral status
     token_admin.mint(&proposer, &500);
-    referral_client.set_user_verified(&proposer, &true);
-    referral_client.set_user_level(&proposer, &UserLevel::Platinum);
+    verify_user_and_set_status(referral_client, vec![&env, proposer.clone()]);
 
     // Create proposal
     let (title, description, metadata_hash, proposal_type, actions) =
@@ -315,6 +329,41 @@ fn test_create_proposal_insufficient_stake() {
     // Verify proposal not created
     let balance = token_client.balance(&proposer);
     assert_eq!(balance, 500, "Balance should not change");
+}
+
+#[test]
+fn test_create_proposal_not_initialized() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    // Setup test environment
+    let (_, _, _, governance_client, referral_client) =
+        create_test_contracts(&env);
+    let (admin, proposer, config) = setup_governance_args(&env);
+    let (_, token_admin, _) = create_token_contracts(&env, &admin);
+
+    // Set token balance and referral status
+    token_admin.mint(&proposer, &1000);
+    verify_user_and_set_status(referral_client, vec![&env, proposer.clone()]);
+
+    // Create proposal without initializing governance client
+    let (title, description, metadata_hash, proposal_type, actions) =
+        setup_proposal_args(&env, &proposer);
+    let result = governance_client.try_create_proposal(
+        &proposer,
+        &title,
+        &description,
+        &metadata_hash,
+        &proposal_type,
+        &actions,
+        &config,
+    );
+
+    assert_eq!(
+        result,
+        Err(Ok(Error::NotInitialized)),
+        "Expected NotInitialized error"
+    );
 }
 
 #[test]
@@ -370,8 +419,7 @@ fn test_create_proposal_proposal_limit_reached() {
 
     // Set token balance and referral status
     token_admin.mint(&proposer, &10000);
-    referral_client.set_user_verified(&proposer, &true);
-    referral_client.set_user_level(&proposer, &UserLevel::Platinum);
+    verify_user_and_set_status(referral_client, vec![&env, proposer.clone()]);
 
     // Create proposal
     let (title, description, metadata_hash, proposal_type, actions) =
@@ -427,8 +475,7 @@ fn test_create_proposal_in_cooldown() {
 
     // Set token balance and referral status
     token_admin.mint(&proposer, &5000);
-    referral_client.set_user_verified(&proposer, &true);
-    referral_client.set_user_level(&proposer, &UserLevel::Platinum);
+    verify_user_and_set_status(referral_client, vec![&env, proposer.clone()]);
 
     // Create proposal
     let (title, description, metadata_hash, proposal_type, actions) =
@@ -468,7 +515,7 @@ fn test_create_proposal_in_cooldown() {
 
     // Try after cooldown
     env.ledger().with_mut(|li| {
-        li.timestamp += COOLDOWN_PERIOD; // Past cooldown
+        li.timestamp += (COOLDOWN_PERIOD / 2) + 1; // Past cooldown
     });
 
     let proposal_id = governance_client.create_proposal(
@@ -528,8 +575,7 @@ fn test_activate_proposal() {
 
     // Set token balance and referral status
     token_admin.mint(&proposer, &2000);
-    referral_client.set_user_verified(&proposer, &true);
-    referral_client.set_user_level(&proposer, &UserLevel::Platinum);
+    verify_user_and_set_status(referral_client, vec![&env, proposer.clone()]);
 
     // Set moderator
     env.as_contract(&governance_id, || {
@@ -590,8 +636,7 @@ fn test_activate_proposal_no_moderators() {
 
     // Set token balance and referral status
     token_admin.mint(&proposer, &2000);
-    referral_client.set_user_verified(&proposer, &true);
-    referral_client.set_user_level(&proposer, &UserLevel::Platinum);
+    verify_user_and_set_status(referral_client, vec![&env, proposer.clone()]);
 
     let (title, description, metadata_hash, proposal_type, actions) =
         setup_proposal_args(&env, &proposer);
@@ -630,8 +675,7 @@ fn test_cancel_proposal() {
 
     // Set token balance and referral status
     token_admin.mint(&proposer, &2000);
-    referral_client.set_user_verified(&proposer, &true);
-    referral_client.set_user_level(&proposer, &UserLevel::Platinum);
+    verify_user_and_set_status(referral_client, vec![&env, proposer.clone()]);
 
     // Set moderator
     env.as_contract(&governance_id, || {
@@ -661,7 +705,7 @@ fn test_cancel_proposal() {
         assert_eq!(
             proposal.status,
             ProposalStatus::Draft,
-            "Status should be Canceled"
+            "Status should be Draft"
         );
     });
 
@@ -707,8 +751,7 @@ fn test_veto_proposal() {
 
     // Set token balance and referral status
     token_admin.mint(&proposer, &2000);
-    referral_client.set_user_verified(&proposer, &true);
-    referral_client.set_user_level(&proposer, &UserLevel::Platinum);
+    verify_user_and_set_status(referral_client, vec![&env, proposer.clone()]);
 
     // Set moderator
     env.as_contract(&governance_id, || {
@@ -764,8 +807,7 @@ fn test_veto_proposal_unauthorized() {
 
     // Set token balance and referral status
     token_admin.mint(&proposer, &2000);
-    referral_client.set_user_verified(&proposer, &true);
-    referral_client.set_user_level(&proposer, &UserLevel::Platinum);
+    verify_user_and_set_status(referral_client, vec![&env, proposer.clone()]);
 
     // Set moderator
     env.as_contract(&governance_id, || {
@@ -823,8 +865,7 @@ fn test_mark_passed_and_executed() {
 
     // Set token balance and referral status
     token_admin.mint(&proposer, &2000);
-    referral_client.set_user_verified(&proposer, &true);
-    referral_client.set_user_level(&proposer, &UserLevel::Platinum);
+    verify_user_and_set_status(referral_client, vec![&env, proposer.clone()]);
 
     // Set moderator
     env.as_contract(&governance_id, || {
@@ -879,8 +920,7 @@ fn test_mark_rejected() {
 
     // Set token balance and referral status
     token_admin.mint(&proposer, &2000);
-    referral_client.set_user_verified(&proposer, &true);
-    referral_client.set_user_level(&proposer, &UserLevel::Platinum);
+    verify_user_and_set_status(referral_client, vec![&env, proposer.clone()]);
 
     // Set moderator
     env.as_contract(&governance_id, || {
@@ -948,11 +988,7 @@ fn test_cast_vote_one_address_one_vote() {
 
     // Set token balance and referral status
     token_admin.mint(&proposer, &2000);
-    referral_client.set_user_verified(&proposer, &true);
-    referral_client.set_user_verified(&voter, &true);
-    referral_client.set_user_level(&proposer, &UserLevel::Platinum);
-    referral_client.set_user_level(&voter, &UserLevel::Platinum);
-    referral_client.set_total_users(&100);
+    verify_user_and_set_status(referral_client, vec![&env, proposer.clone(), voter.clone()]);
 
     // Set moderator
     env.as_contract(&governance_id, || {
@@ -996,6 +1032,240 @@ fn test_cast_vote_one_address_one_vote() {
 }
 
 #[test]
+fn test_cast_vote_insufficient_referral_level() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    // Setup test environment
+    let (governance_id, referral_id, auction_id, governance_client, referral_client) =
+        create_test_contracts(&env);
+    let (admin, proposer, config) = setup_governance_args(&env);
+    let (token_id, token_admin, _) = create_token_contracts(&env, &admin);
+    let (title, description, metadata_hash, proposal_type, actions) =
+        setup_proposal_args(&env, &proposer);
+
+    let moderator = Address::generate(&env);
+    let voter = Address::generate(&env);
+
+    governance_client.initialize(
+        &admin,
+        &token_id,
+        &referral_id,
+        &auction_id,
+        &config,
+    );
+
+    // Set token balance and referral status
+    token_admin.mint(&proposer, &2000);
+    token_admin.mint(&voter, &2000);
+    referral_client.set_user_verified(&voter, &true);
+    referral_client.set_user_level(&voter, &UserLevel::Gold);
+    verify_user_and_set_status(referral_client, vec![&env, proposer.clone()]);
+
+    // Set moderator
+    env.as_contract(&governance_id, || {
+        let mut moderators: Vec<Address> = vec![&env];
+        moderators.push_back(moderator.clone());
+        env.storage().instance().set(&MODERATOR_KEY, &moderators);
+    });
+
+    let proposal_id = governance_client.create_proposal(
+        &proposer,
+        &title,
+        &description,
+        &metadata_hash,
+        &proposal_type,
+        &actions,
+        &config,
+    );
+
+    env.ledger().with_mut(|li| {
+        li.timestamp += COOLDOWN_PERIOD / 24;
+    });
+
+    governance_client.activate_proposal(&moderator, &proposal_id);
+
+    let result = governance_client.try_cast_vote(&voter, &proposal_id, &false);
+    assert_eq!(
+        result,
+        Err(Ok(Error::InsufficientReferralLevel)),
+        "Expected InsufficientReferralLevel error"
+    );
+}
+
+#[test]
+fn test_vote_proposal_inactive() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    // Setup test environment
+    let (governance_id, referral_id, auction_id, governance_client, referral_client) =
+        create_test_contracts(&env);
+    let (admin, proposer, config) = setup_governance_args(&env);
+    let (token_id, token_admin, _) = create_token_contracts(&env, &admin);
+
+    let moderator = Address::generate(&env);
+    let voter = Address::generate(&env);
+
+    governance_client.initialize(&admin, &token_id, &referral_id, &auction_id, &config);
+
+    // Set token balance and referral status
+    token_admin.mint(&proposer, &1000);
+    token_admin.mint(&voter, &2000);
+    verify_user_and_set_status(referral_client, vec![&env, proposer.clone(), voter.clone()]);
+
+    // Set moderator
+    env.as_contract(&governance_id, || {
+        let mut moderators: Vec<Address> = vec![&env];
+        moderators.push_back(moderator.clone());
+        env.storage().instance().set(&MODERATOR_KEY, &moderators);
+    });
+
+    // Create proposal
+    let (title, description, metadata_hash, proposal_type, actions) =
+        setup_proposal_args(&env, &proposer);
+    let proposal_id = governance_client.create_proposal(
+        &proposer,
+        &title,
+        &description,
+        &metadata_hash,
+        &proposal_type,
+        &actions,
+        &config,
+    );
+
+    env.ledger().with_mut(|li| {
+        li.timestamp += COOLDOWN_PERIOD / 24;
+    });
+
+    // Cast vote without activating proposal
+    let result = governance_client.try_cast_vote(&voter, &proposal_id, &false);
+    assert_eq!(
+        result,
+        Err(Ok(Error::ProposalNotActive)),
+        "Expected ProposalNotActive error"
+    );
+}
+
+#[test]
+fn test_vote_not_verified() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    // Setup test environment
+    let (governance_id, referral_id, auction_id, governance_client, referral_client) =
+        create_test_contracts(&env);
+    let (admin, proposer, config) = setup_governance_args(&env);
+    let (token_id, token_admin, _) = create_token_contracts(&env, &admin);
+
+    let moderator = Address::generate(&env);
+    let voter = Address::generate(&env);
+
+    governance_client.initialize(&admin, &token_id, &referral_id, &auction_id, &config);
+
+    // Set token balance and referral status
+    token_admin.mint(&proposer, &1000);
+    token_admin.mint(&voter, &1000);
+    referral_client.set_user_verified(&voter, &false); // Not verified
+    referral_client.set_user_level(&voter, &UserLevel::Platinum);
+    verify_user_and_set_status(referral_client, vec![&env, proposer.clone()]);
+
+    // Set moderator
+    env.as_contract(&governance_id, || {
+        let mut moderators: Vec<Address> = vec![&env];
+        moderators.push_back(moderator.clone());
+        env.storage().instance().set(&MODERATOR_KEY, &moderators);
+    });
+
+    // Create proposal
+    let (title, description, metadata_hash, proposal_type, actions) =
+        setup_proposal_args(&env, &proposer);
+    let proposal_id = governance_client.create_proposal(
+        &proposer,
+        &title,
+        &description,
+        &metadata_hash,
+        &proposal_type,
+        &actions,
+        &config,
+    );
+
+    env.ledger().with_mut(|li| {
+        li.timestamp += COOLDOWN_PERIOD / 24;
+    });
+
+    governance_client.activate_proposal(&moderator, &proposal_id);
+
+    let result = governance_client.try_cast_vote(&voter, &proposal_id, &false);
+
+    assert_eq!(
+        result,
+        Err(Ok(Error::NotVerified)),
+        "Expected NotVerified error"
+    );
+}
+
+#[test]
+fn test_cast_vote_no_voting_power() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    // Setup test environment
+    let (governance_id, referral_id, auction_id, governance_client, referral_client) =
+        create_test_contracts(&env);
+    let (admin, proposer, config) = setup_governance_args(&env);
+    let (token_id, token_admin, _) = create_token_contracts(&env, &admin);
+    let (title, description, metadata_hash, proposal_type, actions) =
+        setup_proposal_args(&env, &proposer);
+
+    let moderator = Address::generate(&env);
+    let voter = Address::generate(&env);
+
+    governance_client.initialize(
+        &admin,
+        &token_id,
+        &referral_id,
+        &auction_id,
+        &config,
+    );
+
+    // Set token balance and referral status
+    token_admin.mint(&proposer, &2000);
+    verify_user_and_set_status(referral_client, vec![&env, proposer.clone(), voter.clone()]);
+
+    // Set moderator
+    env.as_contract(&governance_id, || {
+        let mut moderators: Vec<Address> = vec![&env];
+        moderators.push_back(moderator.clone());
+        env.storage().instance().set(&MODERATOR_KEY, &moderators);
+    });
+
+    let proposal_id = governance_client.create_proposal(
+        &proposer,
+        &title,
+        &description,
+        &metadata_hash,
+        &proposal_type,
+        &actions,
+        &config,
+    );
+
+    env.ledger().with_mut(|li| {
+        li.timestamp += COOLDOWN_PERIOD / 24;
+    });
+
+    governance_client.activate_proposal(&moderator, &proposal_id);
+
+    // Cast vote without sufficient voting power (no tokens minted)
+    let result = governance_client.try_cast_vote(&voter, &proposal_id, &false);
+    assert_eq!(
+        result,
+        Err(Ok(Error::NoVotingPower)),
+        "Expected NoVotingPower error"
+    );
+}
+
+#[test]
 fn test_cast_vote_already_voted() {
     let env = Env::default();
     env.mock_all_auths();
@@ -1028,11 +1298,7 @@ fn test_cast_vote_already_voted() {
 
     // Set token balance and referral status
     token_admin.mint(&proposer, &2000);
-    referral_client.set_user_verified(&proposer, &true);
-    referral_client.set_user_verified(&voter, &true);
-    referral_client.set_user_level(&proposer, &UserLevel::Platinum);
-    referral_client.set_user_level(&voter, &UserLevel::Platinum);
-    referral_client.set_total_users(&100);
+    verify_user_and_set_status(referral_client, vec![&env, proposer.clone(), voter.clone()]);
 
     // Set moderator
     env.as_contract(&governance_id, || {
@@ -1082,7 +1348,6 @@ fn test_tally_votes_passing() {
     let moderator = Address::generate(&env);
     let voter1 = Address::generate(&env);
     let voter2 = Address::generate(&env);
-    log!(&env, "xxxxxnxnxnxnxx  test voters xxxnxnxnxnxxxxx", voter1, voter2);
 
     governance_client.initialize(&admin, &token_id, &referral_id, &auction_id, &config);
 
@@ -1092,13 +1357,7 @@ fn test_tally_votes_passing() {
     token_admin.mint(&voter2, &4000);
 
     // Set user referral statuses
-    referral_client.set_user_verified(&proposer, &true);
-    referral_client.set_user_verified(&voter1, &true);
-    referral_client.set_user_verified(&voter2, &true);
-    referral_client.set_user_level(&proposer, &UserLevel::Platinum);
-    referral_client.set_user_level(&voter1, &UserLevel::Platinum);
-    referral_client.set_user_level(&voter2, &UserLevel::Platinum);
-    referral_client.set_total_users(&10);
+    verify_user_and_set_status(referral_client, vec![&env, proposer.clone(), voter1.clone(), voter2.clone()]);
 
     // Set moderator
     env.as_contract(&governance_id, || {
@@ -1169,11 +1428,7 @@ fn test_tally_votes_not_enough_quorum() {
     token_admin.mint(&voter, &500);
 
     // Set user referral statuses
-    referral_client.set_user_verified(&proposer, &true);
-    referral_client.set_user_verified(&voter, &true);
-    referral_client.set_user_level(&proposer, &UserLevel::Platinum);
-    referral_client.set_user_level(&voter, &UserLevel::Platinum);
-    referral_client.set_total_users(&10);
+    verify_user_and_set_status(referral_client, vec![&env, proposer.clone(), voter.clone()]);
 
     // Set moderator
     env.as_contract(&governance_id, || {
@@ -1322,6 +1577,73 @@ fn test_circular_delegation_not_allowed() {
 }
 
 #[test]
+fn test_cast_vote_afrer_delegation() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    // Setup test environment
+    let (governance_id, referral_id, auction_id, governance_client, referral_client) =
+        create_test_contracts(&env);
+    let (admin, proposer, config) = setup_governance_args(&env);
+    let (token_id, token_admin, _) = create_token_contracts(&env, &admin);
+    let (title, description, metadata_hash, proposal_type, actions) =
+        setup_proposal_args(&env, &proposer);
+
+    let moderator = Address::generate(&env);
+    let delegator = Address::generate(&env);
+    let delegatee = Address::generate(&env);
+
+    governance_client.initialize(
+        &admin,
+        &token_id,
+        &referral_id,
+        &auction_id,
+        &config,
+    );
+
+    // Set token balance and referral status
+    token_admin.mint(&proposer, &2000);
+    token_admin.mint(&delegator, &2000);
+    token_admin.mint(&delegatee, &3000);
+    verify_user_and_set_status(referral_client, vec![&env, proposer.clone(), delegator.clone(), delegatee.clone()]);
+
+    // Set moderator
+    env.as_contract(&governance_id, || {
+        let mut moderators: Vec<Address> = vec![&env];
+        moderators.push_back(moderator.clone());
+        env.storage().instance().set(&MODERATOR_KEY, &moderators);
+    });
+
+    // Create and activate proposal
+    let proposal_id = governance_client.create_proposal(
+        &proposer,
+        &title,
+        &description,
+        &metadata_hash,
+        &proposal_type,
+        &actions,
+        &config,
+    );
+
+    env.ledger().with_mut(|li| {
+        li.timestamp += COOLDOWN_PERIOD / 24;
+    });
+
+    governance_client.activate_proposal(&moderator, &proposal_id);
+
+    // Delegate vote
+    governance_client.delegate_vote(&delegator, &delegatee);
+
+    // Cast vote without sufficient voting power (voting power delegated away)
+    let result = governance_client.try_cast_vote(&delegator, &proposal_id, &true);
+    assert_eq!(
+        result,
+        Err(Ok(Error::NoVotingPower)),
+        "Expected NoVotingPower error"
+    );
+}
+
+#[test]
 fn test_execution_no_delay() {
     let env = Env::default();
     env.mock_all_auths();
@@ -1346,13 +1668,7 @@ fn test_execution_no_delay() {
     token_admin.mint(&voter2, &4000);
 
     // Set user referral statuses
-    referral_client.set_user_verified(&proposer, &true);
-    referral_client.set_user_verified(&voter1, &true);
-    referral_client.set_user_verified(&voter2, &true);
-    referral_client.set_user_level(&proposer, &UserLevel::Platinum);
-    referral_client.set_user_level(&voter1, &UserLevel::Platinum);
-    referral_client.set_user_level(&voter2, &UserLevel::Platinum);
-    referral_client.set_total_users(&10);
+    verify_user_and_set_status(referral_client, vec![&env, proposer.clone(), voter1.clone(), voter2.clone()]);
 
     // Set moderator
     env.as_contract(&governance_id, || {
@@ -1429,13 +1745,7 @@ fn test_execute_actions() {
     token_admin.mint(&voter2, &4000);
 
     // Set user referral statuses
-    referral_client.set_user_verified(&proposer, &true);
-    referral_client.set_user_verified(&voter1, &true);
-    referral_client.set_user_verified(&voter2, &true);
-    referral_client.set_user_level(&proposer, &UserLevel::Platinum);
-    referral_client.set_user_level(&voter1, &UserLevel::Platinum);
-    referral_client.set_user_level(&voter2, &UserLevel::Platinum);
-    referral_client.set_total_users(&10);
+    verify_user_and_set_status(referral_client, vec![&env, proposer.clone(), voter1.clone(), voter2.clone()]);
 
     // Set moderator
     env.as_contract(&governance_id, || {
