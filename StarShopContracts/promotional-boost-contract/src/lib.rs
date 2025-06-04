@@ -7,7 +7,7 @@ mod slots;
 mod visibility;
 
 use payments::PaymentProcessor;
-use slots::{SlotManager, SlotResult};
+use slots::{SlotManager, SlotResult, SlotParams};
 use visibility::VisibilityManager;
 
 #[contract]
@@ -63,16 +63,17 @@ impl PromotionBoostContract {
         let slot_id = now.wrapping_mul(1000000).wrapping_add(product_id).wrapping_add(env.ledger().sequence() as u64);
         let mut slot_manager = SlotManager::load_or_default(&env);
 
-        let slot_result = slot_manager.add_slot(
-            &env,
+        let slot_params = SlotParams {
             slot_id,
             product_id,
-            seller_address.clone(),
-            category.clone(),
-            duration_secs,
-            payment_amount.try_into().expect("Amount conversion failed"),
-            now,
-        );
+            seller: seller_address.clone(),
+            category: category.clone(),
+            duration: duration_secs,
+            price_paid: payment_amount.try_into().expect("Amount conversion failed"),
+            current_time: now,
+        };
+
+        let slot_result = slot_manager.add_slot(&env, slot_params);
 
         // Handle the slot result
         match slot_result {

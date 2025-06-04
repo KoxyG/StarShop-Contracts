@@ -17,6 +17,17 @@ pub enum SlotResult {
     Rejected,                        // Slot was rejected due to limits and insufficient bid
 }
 
+#[derive(Clone, Debug)]
+pub struct SlotParams {
+    pub slot_id: u64,
+    pub product_id: u64,
+    pub seller: Address,
+    pub category: Symbol,
+    pub duration: u64,
+    pub price_paid: u64,
+    pub current_time: u64,
+}
+
 // Stores slots for each category
 #[derive(Clone)]
 #[contracttype]
@@ -41,21 +52,11 @@ impl SlotManager {
         self.max_slots.set(category, count);
     }
 
-    pub fn add_slot(
-        &mut self,
-        env: &Env,
-        slot_id: u64,
-        product_id: u64,
-        seller: Address,
-        category: Symbol,
-        duration: u64,
-        price_paid: u64,
-        current_time: u64,
-    ) -> SlotResult {
-        let category_key = category.clone(); // Clone once for reuse
+    pub fn add_slot(&mut self, env: &Env, params: SlotParams) -> SlotResult {
+        let category_key = params.category.clone(); // Clone once for reuse
 
         // Remove expired slots first
-        self.remove_expired_slots(env, category_key.clone(), current_time);
+        self.remove_expired_slots(env, category_key.clone(), params.current_time);
 
         // Get current slot list or empty
         let mut slot_ids = self
@@ -64,17 +65,17 @@ impl SlotManager {
             .unwrap_or(Vec::new(env));
         let max_slots = self.max_slots.get(category_key.clone()).unwrap_or(3); // default: 3
 
-        if slot_ids.len() < max_slots.into() {
+        if slot_ids.len() < max_slots {
             // There's room → add slot
             let slot = BoostSlot {
-                product_id,
-                seller: seller.clone(),
-                start_time: current_time,
-                end_time: current_time + duration,
-                price_paid,
+                product_id: params.product_id,
+                seller: params.seller.clone(),
+                start_time: params.current_time,
+                end_time: params.current_time + params.duration,
+                price_paid: params.price_paid,
             };
-            self.slots.set(slot_id, slot);
-            slot_ids.push_back(slot_id);
+            self.slots.set(params.slot_id, slot);
+            slot_ids.push_back(params.slot_id);
             self.category_slots.set(category_key, slot_ids);
             return SlotResult::Added;
         }
@@ -94,7 +95,7 @@ impl SlotManager {
         }
 
         // Check if the new bid is higher than the lowest existing bid
-        if price_paid > lowest_price {
+        if params.price_paid > lowest_price {
             let replace_id = lowest_slot_id.unwrap();
             
             // Get the old slot data before removing it
@@ -105,13 +106,13 @@ impl SlotManager {
 
             // Create the new slot
             let new_slot = BoostSlot {
-                product_id,
-                seller: seller.clone(),
-                start_time: current_time,
-                end_time: current_time + duration,
-                price_paid,
+                product_id: params.product_id,
+                seller: params.seller.clone(),
+                start_time: params.current_time,
+                end_time: params.current_time + params.duration,
+                price_paid: params.price_paid,
             };
-            self.slots.set(slot_id, new_slot);
+            self.slots.set(params.slot_id, new_slot);
 
             // Update the category slots list - replace the old slot ID with the new one
             let mut updated_ids = Vec::new(env);
@@ -120,7 +121,7 @@ impl SlotManager {
                     updated_ids.push_back(id);
                 }
             }
-            updated_ids.push_back(slot_id);
+            updated_ids.push_back(params.slot_id);
             self.category_slots.set(category_key, updated_ids);
 
             return SlotResult::Replaced(replace_id, replaced_slot);
@@ -154,7 +155,7 @@ impl SlotManager {
     pub fn get_active_slots(&self, category: Symbol) -> Vec<u64> {
         self.category_slots
             .get(category)
-            .unwrap_or(Vec::new(&self.slots.env()))
+            .unwrap_or(Vec::new(self.slots.env()))
     }
 
     pub fn get_slot(&self, slot_id: u64) -> Option<BoostSlot> {

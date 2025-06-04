@@ -16,7 +16,7 @@ impl PaymentProcessor {
 
         // Use Stellar's native asset (XLM) - in test this will be the mocked token
         let token_id = Self::get_xlm_token_address(env);
-        let token = token::Client::new(&env, &token_id);
+        let token = token::Client::new(env, &token_id);
         token.transfer(from, &env.current_contract_address(), &amount);
 
         Ok(())
@@ -29,7 +29,7 @@ impl PaymentProcessor {
         }
 
         let token_id = Self::get_xlm_token_address(env);
-        let token = token::Client::new(&env, &token_id);
+        let token = token::Client::new(env, &token_id);
         token.transfer(&env.current_contract_address(), to, &amount);
 
         Ok(())
@@ -48,17 +48,14 @@ impl PaymentProcessor {
     /// in tests this will be the mocked stellar asset contract
     fn get_xlm_token_address(env: &Env) -> Address {
         // Try to get from storage first (for test environment)
-        let contract_addr = env.current_contract_address();
-        if let Some(addr) = env.as_contract(&contract_addr, || {
-            env.storage().instance().get::<soroban_sdk::Symbol, Address>(&soroban_sdk::symbol_short!("xlm_addr"))
-        }) {
+        if let Some(addr) = env.storage().instance().get::<soroban_sdk::Symbol, Address>(&soroban_sdk::symbol_short!("xlm_addr")) {
             return addr;
         }
         
         // Fallback to hardcoded address for production (Stellar native asset representation)
         // This is a placeholder - in real Stellar, you'd use the native asset differently
         Address::from_str(
-            &env,
+            env,
             "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC",
         )
     }
@@ -67,9 +64,6 @@ impl PaymentProcessor {
     #[cfg(test)]
     #[allow(dead_code)]
     pub fn set_xlm_token_address(env: &Env, token_address: &Address) {
-        let contract_addr = env.current_contract_address();
-        env.as_contract(&contract_addr, || {
-            env.storage().instance().set(&soroban_sdk::symbol_short!("xlm_addr"), token_address);
-        });
+        env.storage().instance().set(&soroban_sdk::symbol_short!("xlm_addr"), token_address);
     }
 }
