@@ -68,7 +68,7 @@ impl VisibilityManager {
 
     /// Returns list of all boosted product IDs
     pub fn get_active_boosts(&self, current_time: u64) -> Vec<u64> {
-        let mut result = Vec::new(&self.boosts.env());
+        let mut result = Vec::new(self.boosts.env());
         for pid in self.boosts.keys().iter() {
             if let Some(info) = self.boosts.get(pid) {
                 if current_time < info.end_time {

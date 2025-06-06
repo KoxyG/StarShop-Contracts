@@ -7,6 +7,7 @@ members = [
     "StarShopContracts/governance-system-contract",
     "StarShopContracts/implement-nft-contract",
     "StarShopContracts/implement-payment-contract",
+    "StarShopContracts/limited-time-drop",
     "StarShopContracts/loyalty-rewards-contract",
     "StarShopContracts/multi-auction-contract",
     "StarShopContracts/product-follow-contract",
