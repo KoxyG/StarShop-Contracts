@@ -48,17 +48,17 @@ impl PromotionBoostContract {
 
         let seller_address_clone = seller_address.clone();
 
-        // 1. Calculate required price
+        // Calculate required price
         let required_price = PaymentProcessor::calculate_price(duration_secs);
         if payment_amount < required_price {
             panic!("Insufficient payment for duration");
         }
 
-        // 2. Collect XLM from seller
+        // Collect XLM from seller
         PaymentProcessor::collect_payment(&env, &seller_address, payment_amount, required_price)
             .expect("XLM payment failed");
 
-        // 3. Access or create slot manager
+        // Access or create slot manager
         // Generate unique slot ID using a combination that's more likely to be unique
         let slot_id = now.wrapping_mul(1000000).wrapping_add(product_id).wrapping_add(env.ledger().sequence() as u64);
         let mut slot_manager = SlotManager::load_or_default(&env);
@@ -126,7 +126,10 @@ impl PromotionBoostContract {
 
                 // Emit event for replaced slot
                 env.events().publish(
-                    (Symbol::new(&env, "boost_slot_replaced"), replaced_slot.seller.clone()),
+                    (
+                        Symbol::new(&env, "boost_slot_replaced"),
+                        replaced_slot.seller.clone(),
+                    ),
                     (replaced_slot.product_id, replaced_slot.price_paid),
                 );
 
