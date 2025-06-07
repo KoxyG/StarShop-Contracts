@@ -336,3 +336,15 @@ fn test_contribute_zero_amount_fails() {
         .mock_auths(&[MockAuth { address: &test.contributor1, invoke: &MockAuthInvoke { contract: &test.contract_id, fn_name: "contribute", args: vec![&test.env, test.contributor1.clone().into_val(&test.env), product_id.into_val(&test.env), contribution1_amount.into_val(&test.env)], sub_invokes: &[] } }])
         .contribute(&test.contributor1, &product_id, &contribution1_amount); // Should panic
 }
+
+#[test]
+#[should_panic(expected = "Contribution would exceed funding goal")]
+fn test_contribute_exceeds_goal_fails() {
+    let test = CrowdfundingTest::setup();
+    let product_id = create_test_product(&test, 100, 3600, None, None);
+    let contribution1_amount = 150; // Exceeds funding goal of 100
+    test.client
+        .mock_auths(&[MockAuth { address: &test.contributor1, invoke: &MockAuthInvoke { contract: &test.contract_id, fn_name: "contribute", args: vec![&test.env, test.contributor1.clone().into_val(&test.env), product_id.into_val(&test.env), contribution1_amount.into_val(&test.env)], sub_invokes: &[] } }])
+        .contribute(&test.contributor1, &product_id, &contribution1_amount); // Contribute 150
+}
+
