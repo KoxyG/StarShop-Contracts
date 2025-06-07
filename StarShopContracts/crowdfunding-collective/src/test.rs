@@ -484,3 +484,17 @@ fn test_refund_contributors_successful() {
     let contributions_after_refund = test.client.get_contributions(&product_id);
     assert_eq!(contributions_after_refund.len(), 0);
 }
+
+#[test]
+#[should_panic(expected = "Product is not active")]
+fn test_refund_contributors_product_funded_fails() {
+    let test = CrowdfundingTest::setup();
+    let product_id = create_test_product(&test, 100, 1000, None, None);
+    let contribution1_amount = 100;
+    test.client
+        .mock_auths(&[MockAuth { address: &test.contributor1, invoke: &MockAuthInvoke { contract: &test.contract_id, fn_name: "contribute", args: vec![&test.env, test.contributor1.clone().into_val(&test.env), product_id.into_val(&test.env), contribution1_amount.into_val(&test.env)], sub_invokes: &[] } }])
+        .contribute(&test.contributor1, &product_id, &contribution1_amount); // Fund it
+    assert_eq!(test.client.get_product(&product_id).status, ProductStatus::Funded);
+    advance_ledger_time(&test.env, 1001); // Pass deadline
+    test.client.refund_contributors(&product_id); // Should panic as product is Funded
+}
