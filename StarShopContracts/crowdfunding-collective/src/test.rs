@@ -614,3 +614,19 @@ fn test_claim_reward_no_eligible_tier_fails() {
         .mock_auths(&[MockAuth { address: &test.contributor1, invoke: &MockAuthInvoke { contract: &test.contract_id, fn_name: "claim_reward", args: vec![env, test.contributor1.clone().into_val(env), product_id.into_val(env)], sub_invokes: &[] } }])
         .claim_reward(&test.contributor1, &product_id); // Should panic as no eligible tier
 }
+
+#[test]
+fn test_getters_for_non_existent_product() {
+    let test = CrowdfundingTest::setup();
+    let non_existent_product_id = 999u32;
+
+    // get_product panics if not found, so test its panic separately
+    let contributions = test.client.get_contributions(&non_existent_product_id);
+    assert_eq!(contributions.len(), 0);
+
+    let milestones = test.client.get_milestones(&non_existent_product_id);
+    assert_eq!(milestones.len(), 0);
+
+    let reward_tiers = test.client.get_reward_tiers(&non_existent_product_id);
+    assert_eq!(reward_tiers.len(), 0);
+}
