@@ -74,3 +74,68 @@ fn advance_ledger_time(env: &Env, time_advance_seconds: u64) {
     });
 }
 
+// Helper to create a basic product for tests
+fn create_test_product<'a>(
+    test: &CrowdfundingTest<'a>, 
+    funding_goal: u64, 
+    deadline_offset_seconds: u64,
+    reward_tiers_override: Option<Vec<RewardTier>>,
+    milestones_override: Option<Vec<Milestone>>,
+) -> u32 {
+    let env = &test.env;
+    let name = String::from_str(env, "Test Product");
+    let description = String::from_str(env, "A great product for testing");
+    let deadline = env.ledger().timestamp() + deadline_offset_seconds;
+
+    let reward_tiers = reward_tiers_override.unwrap_or_else(|| vec![
+        env,
+        RewardTier {
+            id: 1,
+            min_contribution: 50,
+            description: String::from_str(env, "Basic Reward"),
+            discount: 5,
+        },
+    ]);
+    let milestones = milestones_override.unwrap_or_else(|| vec![
+        env,
+        Milestone {
+            id: 0, // Milestones Vec is 0-indexed
+            description: String::from_str(env, "Phase 1"),
+            target_date: deadline + 100, // After product deadline
+            completed: false,
+        },
+    ]);
+
+    test.client
+        .mock_auths(&[
+            MockAuth {
+                address: &test.creator,
+                invoke: &MockAuthInvoke {
+                    contract: &test.contract_id,
+                    fn_name: "create_product",
+                    args: vec![
+                        env,
+                        test.creator.clone().into_val(env),
+                        name.clone().into_val(env),
+                        description.clone().into_val(env),
+                        funding_goal.into_val(env),
+                        deadline.into_val(env),
+                        reward_tiers.clone().into_val(env),
+                        milestones.clone().into_val(env),
+                    ],
+                    sub_invokes: &[],
+                },
+            }
+        ])
+        .create_product(
+            &test.creator,
+            &name,
+            &description,
+            &funding_goal,
+            &deadline,
+            &reward_tiers,
+            &milestones,
+        )
+}
+
+
