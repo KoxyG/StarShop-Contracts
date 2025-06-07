@@ -630,3 +630,10 @@ fn test_getters_for_non_existent_product() {
     let reward_tiers = test.client.get_reward_tiers(&non_existent_product_id);
     assert_eq!(reward_tiers.len(), 0);
 }
+
+#[test]
+#[should_panic(expected = "Product not found")] // Based on unwrap_or_else in get_product
+fn test_get_product_not_found_panics() {
+    let test = CrowdfundingTest::setup();
+    test.client.get_product(&999u32);
+}
