@@ -202,3 +202,60 @@ fn test_create_product_zero_funding_goal() {
     let test = CrowdfundingTest::setup();
     create_test_product(&test, 0, 3600, None, None);
 }
+
+#[test]
+#[should_panic(expected = "Deadline must be in the future")]
+fn test_create_product_past_deadline() {
+    let test = CrowdfundingTest::setup();
+    let env = &test.env;
+    env.ledger().set_timestamp(100);
+
+    let name = String::from_str(env, "Past Deadline");
+    let description = String::from_str(env, "This product has a past deadline");
+    let funding_goal = 1000;
+    let deadline = 50; // Past deadline, should be less than env.ledger().timestamp()
+    let reward_tiers = vec![env, RewardTier {
+        id: 1,
+        min_contribution: 50,
+        description: String::from_str(env, "Basic Reward"),
+        discount: 5,
+    }];
+    let milestones = vec![env, Milestone {
+        id: 0,
+        description: String::from_str(env, "Phase 1"),
+        target_date: env.ledger().timestamp() + 100, // After product deadline
+        completed: false,
+    }];
+    
+    // create_test_product uses env.ledger().timestamp() + offset, so we need to call client directly
+     test.client
+     .mock_auths(&[
+        MockAuth {
+            address: &test.creator,
+            invoke: &MockAuthInvoke {
+                contract: &test.contract_id,
+                fn_name: "create_product",
+                args: vec![
+                    env,
+                    test.creator.clone().into_val(env),
+                    name.clone().into_val(env),
+                    description.clone().into_val(env),
+                    funding_goal.into_val(env),
+                    deadline.into_val(env),
+                    reward_tiers.clone().into_val(env),
+                    milestones.clone().into_val(env),
+                ],
+                sub_invokes: &[],
+            },
+        }
+    ])
+        .create_product(
+            &test.creator,
+            &name,
+            &description,
+            &funding_goal,
+            &deadline, // This is 50, which is past the current ledger timestamp of 100
+            &reward_tiers,
+            &milestones,
+        );
+}
