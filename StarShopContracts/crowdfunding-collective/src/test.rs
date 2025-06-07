@@ -152,3 +152,18 @@ fn test_initialization_and_admin_set() {
     let product_id_2 = create_test_product(&test, 1000, 10000, None, None);
     assert_eq!(product_id_2, 2, "Second product ID should be 2");
 }
+
+#[test]
+#[should_panic(expected = "HostError: Error(Auth, InvalidAction)")]
+fn test_initialize_unauthorized_attempt() {
+    let env = Env::default();
+    // DO NOT mock_all_auths here
+    let contract_id = env.register(CrowdfundingCollective, ());
+    let client = CrowdfundingCollectiveClient::new(&env, &contract_id);
+    let real_admin_for_arg = Address::generate(&env);
+
+    // Attempt to initialize where admin_wannabe is the invoker but not the 'admin' argument's authorizer
+    // The panic comes from real_admin_for_arg.require_auth()
+    client.initialize(&real_admin_for_arg);
+}
+
