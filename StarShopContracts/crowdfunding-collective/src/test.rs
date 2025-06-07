@@ -458,3 +458,29 @@ fn test_distribute_funds_milestones_not_completed_fails() {
     // Milestones not completed
     test.client.distribute_funds(&product_id);
 }
+
+#[test]
+fn test_refund_contributors_successful() {
+    let test = CrowdfundingTest::setup();
+    let env = &test.env;
+    let product_id = create_test_product(&test, 1000, 100, None, None); // Short deadline
+    
+    let contribution1_amount = 100;
+    let contribution2_amount = 200;
+    test.client
+        .mock_auths(&[MockAuth { address: &test.contributor1, invoke: &MockAuthInvoke { contract: &test.contract_id, fn_name: "contribute", args: vec![env, test.contributor1.clone().into_val(env), product_id.into_val(env), contribution1_amount.into_val(env)], sub_invokes: &[] } }])
+        .contribute(&test.contributor1, &product_id, &contribution1_amount);
+    test.client
+        .mock_auths(&[MockAuth { address: &test.contributor2, invoke: &MockAuthInvoke { contract: &test.contract_id, fn_name: "contribute", args: vec![env, test.contributor2.clone().into_val(env), product_id.into_val(env), contribution2_amount.into_val(env)], sub_invokes: &[] } }])
+        .contribute(&test.contributor2, &product_id, &contribution2_amount);
+
+    advance_ledger_time(env, 101); // Pass deadline, product still Active (not fully funded)
+
+    test.client.refund_contributors(&product_id);
+
+    let product_data = test.client.get_product(&product_id);
+    assert_eq!(product_data.status, ProductStatus::Failed);
+
+    let contributions_after_refund = test.client.get_contributions(&product_id);
+    assert_eq!(contributions_after_refund.len(), 0);
+}
