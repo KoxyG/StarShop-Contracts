@@ -564,3 +564,24 @@ fn test_claim_reward_product_not_completed_fails() {
         .mock_auths(&[MockAuth { address: &test.contributor1, invoke: &MockAuthInvoke { contract: &test.contract_id, fn_name: "claim_reward", args: vec![&test.env, test.contributor1.clone().into_val(&test.env), product_id.into_val(&test.env)], sub_invokes: &[] } }])
         .claim_reward(&test.contributor1, &product_id); // Should panic
 }
+
+#[test]
+#[should_panic(expected = "No contributions found for this contributor")]
+fn test_claim_reward_no_contributions_fails() {
+    let test = CrowdfundingTest::setup();
+    let product_id = create_test_product(&test, 100, 1000, None, None);
+    let contributor1_amount = 100;
+    let milestone_id = 0;
+    test.client
+        .mock_auths(&[MockAuth { address: &test.contributor1, invoke: &MockAuthInvoke { contract: &test.contract_id, fn_name: "contribute", args: vec![&test.env, test.contributor1.clone().into_val(&test.env), product_id.into_val(&test.env), contributor1_amount.into_val(&test.env)], sub_invokes: &[] } }])
+        .contribute(&test.contributor1, &product_id, &contributor1_amount); // Fund it
+    test.client
+        .mock_auths(&[MockAuth { address: &test.creator, invoke: &MockAuthInvoke { contract: &test.contract_id, fn_name: "update_milestone", args: vec![&test.env, test.creator.clone().into_val(&test.env), product_id.into_val(&test.env), milestone_id.into_val(&test.env)], sub_invokes: &[] } }])
+        .update_milestone(&test.creator, &product_id, &milestone_id); // Complete milestone
+    test.client.distribute_funds(&product_id); // Product completed
+
+    // C2 (who didn't contribute) tries to claim
+    test.client
+        .mock_auths(&[MockAuth { address: &test.contributor2, invoke: &MockAuthInvoke { contract: &test.contract_id, fn_name: "claim_reward", args: vec![&test.env, test.contributor2.clone().into_val(&test.env), product_id.into_val(&test.env)], sub_invokes: &[] } }])
+        .claim_reward(&test.contributor2, &product_id); // Should panic
+}
