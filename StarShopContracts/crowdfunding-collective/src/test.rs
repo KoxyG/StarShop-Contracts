@@ -139,3 +139,16 @@ fn create_test_product<'a>(
 }
 
 
+#[test]
+fn test_initialization_and_admin_set() {
+    // Setup implicitly calls initialize.
+    // If we had a get_admin or get_next_product_id, we'd assert here.
+    // For now, successful setup implies initialize worked.
+    // We can test next_product_id indirectly.
+    let test = CrowdfundingTest::setup();
+    let product_id = create_test_product(&test, 1000, 10000, None, None);
+    assert_eq!(product_id, 1, "First product ID should be 1 after initialization");
+
+    let product_id_2 = create_test_product(&test, 1000, 10000, None, None);
+    assert_eq!(product_id_2, 2, "Second product ID should be 2");
+}
