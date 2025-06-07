@@ -385,3 +385,14 @@ fn test_update_milestone_unauthorized_user_fails() {
         .mock_auths(&[MockAuth { address: &non_creator, invoke: &MockAuthInvoke { contract: &test.contract_id, fn_name: "update_milestone", args: vec![&test.env, non_creator.into_val(&test.env), product_id.into_val(&test.env), milestone_id.into_val(&test.env)], sub_invokes: &[] } }])
         .update_milestone(&non_creator, &product_id, &milestone_id);
 }
+
+#[test]
+#[should_panic(expected = "Product is not funded")]
+fn test_update_milestone_product_not_funded_fails() {
+    let test = CrowdfundingTest::setup();
+    let product_id = create_test_product(&test, 100, 3600, None, None); // Not funded
+    let milestone_id = 0;
+    test.client
+        .mock_auths(&[MockAuth { address: &test.creator, invoke: &MockAuthInvoke { contract: &test.contract_id, fn_name: "update_milestone", args: vec![&test.env, test.creator.clone().into_val(&test.env), product_id.into_val(&test.env), milestone_id.into_val(&test.env)], sub_invokes: &[] } }])
+        .update_milestone(&test.creator, &product_id, &milestone_id); // Should panic
+}
