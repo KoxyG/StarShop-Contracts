@@ -311,3 +311,16 @@ fn test_contribute_to_funded_product_fails() {
         .mock_auths(&[MockAuth { address: &test.contributor2, invoke: &MockAuthInvoke { contract: &test.contract_id, fn_name: "contribute", args: vec![&test.env, test.contributor2.clone().into_val(&test.env), product_id.into_val(&test.env), contribution2_amount.into_val(&test.env)], sub_invokes: &[] } }])
         .contribute(&test.contributor2, &product_id, &contribution2_amount); // Should panic
 }
+
+#[test]
+#[should_panic(expected = "Funding period has ended")]
+fn test_contribute_after_deadline_fails() {
+    let test = CrowdfundingTest::setup();
+    let funding_goal = 1000;
+    let contribution1_amount = 1000;
+    let product_id = create_test_product(&test, funding_goal, 100, None, None); // Short deadline: 100s
+    advance_ledger_time(&test.env, 101); // Pass deadline
+    test.client
+        .mock_auths(&[MockAuth { address: &test.contributor1, invoke: &MockAuthInvoke { contract: &test.contract_id, fn_name: "contribute", args: vec![&test.env, test.contributor1.clone().into_val(&test.env), product_id.into_val(&test.env), contribution1_amount.into_val(&test.env)], sub_invokes: &[] } }])
+        .contribute(&test.contributor1, &product_id, &contribution1_amount); // Should panic
+}
