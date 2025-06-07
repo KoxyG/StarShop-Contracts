@@ -585,3 +585,32 @@ fn test_claim_reward_no_contributions_fails() {
         .mock_auths(&[MockAuth { address: &test.contributor2, invoke: &MockAuthInvoke { contract: &test.contract_id, fn_name: "claim_reward", args: vec![&test.env, test.contributor2.clone().into_val(&test.env), product_id.into_val(&test.env)], sub_invokes: &[] } }])
         .claim_reward(&test.contributor2, &product_id); // Should panic
 }
+
+#[test]
+#[should_panic(expected = "No eligible reward tier found")]
+fn test_claim_reward_no_eligible_tier_fails() {
+    let test = CrowdfundingTest::setup();
+    let env = &test.env;
+    let reward_tiers = vec![env, RewardTier { id: 1, min_contribution: 100, description: String::from_str(env, "High Tier"), discount: 10 }];
+    let product_id = create_test_product(&test, 100, 1000, Some(reward_tiers), None);
+    let contributor1_amount = 50; // Less than min for any tier
+    let milestone_id = 0;
+
+    test.client
+        .mock_auths(&[MockAuth { address: &test.contributor1, invoke: &MockAuthInvoke { contract: &test.contract_id, fn_name: "contribute", args: vec![env, test.contributor1.clone().into_val(env), product_id.into_val(env), contributor1_amount.into_val(env)], sub_invokes: &[] } }])
+        .contribute(&test.contributor1, &product_id, &contributor1_amount); // Fund it
+    // Fund fully with another contributor to allow completion
+    let another_contributor = Address::generate(env);
+    test.client
+        .mock_auths(&[MockAuth { address: &another_contributor, invoke: &MockAuthInvoke { contract: &test.contract_id, fn_name: "contribute", args: vec![env, another_contributor.into_val(env), product_id.into_val(env), contributor1_amount.into_val(env)], sub_invokes: &[] } }])
+        .contribute(&another_contributor, &product_id, &contributor1_amount); // Fund it to meet goal
+
+    test.client
+        .mock_auths(&[MockAuth { address: &test.creator, invoke: &MockAuthInvoke { contract: &test.contract_id, fn_name: "update_milestone", args: vec![env, test.creator.clone().into_val(env), product_id.into_val(env), milestone_id.into_val(env)], sub_invokes: &[] } }])
+        .update_milestone(&test.creator, &product_id, &milestone_id); // Complete milestone
+    test.client.distribute_funds(&product_id); // Product completed
+
+    test.client
+        .mock_auths(&[MockAuth { address: &test.contributor1, invoke: &MockAuthInvoke { contract: &test.contract_id, fn_name: "claim_reward", args: vec![env, test.contributor1.clone().into_val(env), product_id.into_val(env)], sub_invokes: &[] } }])
+        .claim_reward(&test.contributor1, &product_id); // Should panic as no eligible tier
+}
