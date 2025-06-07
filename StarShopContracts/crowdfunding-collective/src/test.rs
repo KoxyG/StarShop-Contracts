@@ -195,3 +195,10 @@ fn test_create_product_successful() {
     let contributions = test.client.get_contributions(&product_id);
     assert_eq!(contributions.len(), 0);
 }
+
+#[test]
+#[should_panic(expected = "Funding goal must be greater than zero")]
+fn test_create_product_zero_funding_goal() {
+    let test = CrowdfundingTest::setup();
+    create_test_product(&test, 0, 3600, None, None);
+}
