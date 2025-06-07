@@ -348,3 +348,22 @@ fn test_contribute_exceeds_goal_fails() {
         .contribute(&test.contributor1, &product_id, &contribution1_amount); // Contribute 150
 }
 
+#[test]
+fn test_update_milestone_successful() {
+    let test = CrowdfundingTest::setup();
+    let env = &test.env;
+    let product_id = create_test_product(&test, 100, 3600, None, None);
+    let contribution1_amount = 100;
+    test.client
+        .mock_auths(&[MockAuth { address: &test.contributor1, invoke: &MockAuthInvoke { contract: &test.contract_id, fn_name: "contribute", args: vec![env, test.contributor1.clone().into_val(env), product_id.into_val(env), contribution1_amount.into_val(env)], sub_invokes: &[] } }])
+        .contribute(&test.contributor1, &product_id, &contribution1_amount); // Fund
+    assert_eq!(test.client.get_product(&product_id).status, ProductStatus::Funded);
+
+    let milestone_id_to_update = 0; // First milestone
+    test.client
+        .mock_auths(&[MockAuth { address: &test.creator, invoke: &MockAuthInvoke { contract: &test.contract_id, fn_name: "update_milestone", args: vec![env, test.creator.clone().into_val(env), product_id.into_val(env), milestone_id_to_update.into_val(env)], sub_invokes: &[] } }])
+        .update_milestone(&test.creator, &product_id, &milestone_id_to_update);
+
+    let milestones = test.client.get_milestones(&product_id);
+    assert!(milestones.get(milestone_id_to_update).unwrap().completed);
+}
