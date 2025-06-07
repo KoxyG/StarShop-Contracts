@@ -396,3 +396,22 @@ fn test_update_milestone_product_not_funded_fails() {
         .mock_auths(&[MockAuth { address: &test.creator, invoke: &MockAuthInvoke { contract: &test.contract_id, fn_name: "update_milestone", args: vec![&test.env, test.creator.clone().into_val(&test.env), product_id.into_val(&test.env), milestone_id.into_val(&test.env)], sub_invokes: &[] } }])
         .update_milestone(&test.creator, &product_id, &milestone_id); // Should panic
 }
+
+#[test]
+#[should_panic(expected = "Milestone already completed")]
+fn test_update_milestone_already_completed_fails() {
+    let test = CrowdfundingTest::setup();
+    let product_id = create_test_product(&test, 100, 3600, None, None);
+    let contributor1_amount = 100;
+    test.client
+        .mock_auths(&[MockAuth { address: &test.contributor1, invoke: &MockAuthInvoke { contract: &test.contract_id, fn_name: "contribute", args: vec![&test.env, test.contributor1.clone().into_val(&test.env), product_id.into_val(&test.env), contributor1_amount.into_val(&test.env)], sub_invokes: &[] } }])
+        .contribute(&test.contributor1, &product_id, &contributor1_amount); // Fund
+
+    let milestone_id = 0; // First milestone
+    test.client
+        .mock_auths(&[MockAuth { address: &test.creator, invoke: &MockAuthInvoke { contract: &test.contract_id, fn_name: "update_milestone", args: vec![&test.env, test.creator.clone().into_val(&test.env), product_id.into_val(&test.env), milestone_id.into_val(&test.env)], sub_invokes: &[] } }])
+        .update_milestone(&test.creator, &product_id, &milestone_id); // Complete milestone
+    test.client
+        .mock_auths(&[MockAuth { address: &test.creator, invoke: &MockAuthInvoke { contract: &test.contract_id, fn_name: "update_milestone", args: vec![&test.env, test.creator.clone().into_val(&test.env), product_id.into_val(&test.env), milestone_id.into_val(&test.env)], sub_invokes: &[] } }])
+        .update_milestone(&test.creator, &product_id, &milestone_id); // Try to complete again, should panic
+}
