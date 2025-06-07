@@ -1,5 +1,5 @@
 #![no_std]
-use soroban_sdk::{Address, Bytes, Env, Map, Symbol, Vec, contract, contractimpl};
+use soroban_sdk::{contract, contractimpl, Address, Bytes, Env, Map, Symbol, Vec};
 
 mod distribution;
 mod eligibility;
@@ -11,6 +11,9 @@ pub use distribution::*;
 pub use tracking::*;
 
 use types::{AirdropError, AirdropEvent, DataKey, EventStats};
+
+#[cfg(test)]
+mod test;
 
 #[contract]
 pub struct AirdropContract;
