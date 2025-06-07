@@ -437,3 +437,11 @@ fn test_distribute_funds_successful() {
     let product_data = test.client.get_product(&product_id);
     assert_eq!(product_data.status, ProductStatus::Completed);
 }
+
+#[test]
+#[should_panic(expected = "Product is not funded")]
+fn test_distribute_funds_not_funded_fails() {
+    let test = CrowdfundingTest::setup();
+    let product_id = create_test_product(&test, 100, 3600, None, None); // Not funded
+    test.client.distribute_funds(&product_id);
+}
