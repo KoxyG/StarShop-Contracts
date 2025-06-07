@@ -167,3 +167,31 @@ fn test_initialize_unauthorized_attempt() {
     client.initialize(&real_admin_for_arg);
 }
 
+#[test]
+fn test_create_product_successful() {
+    let test = CrowdfundingTest::setup();
+    let env = &test.env;
+    let funding_goal = 10000;
+    let deadline_offset = 3600; // 1 hour
+    let product_id = create_test_product(&test, funding_goal, deadline_offset, None, None);
+
+    let product_data = test.client.get_product(&product_id);
+    assert_eq!(product_data.id, product_id);
+    assert_eq!(product_data.creator, test.creator);
+    assert_eq!(product_data.name, String::from_str(env, "Test Product"));
+    assert_eq!(product_data.funding_goal, funding_goal);
+    assert_eq!(product_data.deadline, env.ledger().timestamp() + deadline_offset); // Timestamp taken at product creation
+    assert_eq!(product_data.status, ProductStatus::Active);
+    assert_eq!(product_data.total_funded, 0);
+
+    let rewards = test.client.get_reward_tiers(&product_id);
+    assert_eq!(rewards.len(), 1);
+    assert_eq!(rewards.get(0).unwrap().id, 1);
+
+    let milestones = test.client.get_milestones(&product_id);
+    assert_eq!(milestones.len(), 1);
+    assert_eq!(milestones.get(0).unwrap().description, String::from_str(env, "Phase 1"));
+
+    let contributions = test.client.get_contributions(&product_id);
+    assert_eq!(contributions.len(), 0);
+}
