@@ -549,3 +549,18 @@ fn test_claim_reward_successful() {
         .mock_auths(&[MockAuth { address: &test.contributor2, invoke: &MockAuthInvoke { contract: &test.contract_id, fn_name: "claim_reward", args: vec![env, test.contributor2.clone().into_val(env), product_id.into_val(env)], sub_invokes: &[] } }])
         .claim_reward(&test.contributor2, &product_id);
 }
+
+#[test]
+#[should_panic(expected = "Product is not completed")]
+fn test_claim_reward_product_not_completed_fails() {
+    let test = CrowdfundingTest::setup();
+    let product_id = create_test_product(&test, 100, 1000, None, None);
+    let contributor1_amount = 100;
+    test.client
+        .mock_auths(&[MockAuth { address: &test.contributor1, invoke: &MockAuthInvoke { contract: &test.contract_id, fn_name: "contribute", args: vec![&test.env, test.contributor1.clone().into_val(&test.env), product_id.into_val(&test.env), contributor1_amount.into_val(&test.env)], sub_invokes: &[] } }])
+        .contribute(&test.contributor1, &product_id, &contributor1_amount); // Fund it
+    // Product not completed, so claiming reward should fail
+    test.client
+        .mock_auths(&[MockAuth { address: &test.contributor1, invoke: &MockAuthInvoke { contract: &test.contract_id, fn_name: "claim_reward", args: vec![&test.env, test.contributor1.clone().into_val(&test.env), product_id.into_val(&test.env)], sub_invokes: &[] } }])
+        .claim_reward(&test.contributor1, &product_id); // Should panic
+}
