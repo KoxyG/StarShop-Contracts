@@ -58,3 +58,19 @@ impl<'a> CrowdfundingTest<'a> {
         }
     }
 }
+
+// Helper function to advance ledger time
+fn advance_ledger_time(env: &Env, time_advance_seconds: u64) {
+    let current_ledger = env.ledger().get();
+    env.ledger().set(LedgerInfo {
+        timestamp: current_ledger.timestamp + time_advance_seconds,
+        protocol_version: current_ledger.protocol_version,
+        sequence_number: current_ledger.sequence_number + 1,
+        network_id: current_ledger.network_id,
+        base_reserve: current_ledger.base_reserve,
+        min_temp_entry_ttl: current_ledger.min_temp_entry_ttl,
+        min_persistent_entry_ttl: current_ledger.min_persistent_entry_ttl,
+        max_entry_ttl: current_ledger.max_entry_ttl,
+    });
+}
+
