@@ -292,3 +292,22 @@ fn test_contribute_successful_and_fund_product() {
     assert_eq!(product_data_funded.status, ProductStatus::Funded);
 }
 
+#[test]
+#[should_panic(expected = "Product is not active")]
+fn test_contribute_to_funded_product_fails() {
+    let test = CrowdfundingTest::setup();
+    let funding_goal = 1000;
+
+    let contribution1_amount = 1000;
+
+    let product_id = create_test_product(&test, funding_goal, 3600, None, None);
+    test.client
+        .mock_auths(&[MockAuth { address: &test.contributor1, invoke: &MockAuthInvoke { contract: &test.contract_id, fn_name: "contribute", args: vec![&test.env, test.contributor1.clone().into_val(&test.env), product_id.into_val(&test.env), contribution1_amount.into_val(&test.env)], sub_invokes: &[] } }])
+        .contribute(&test.contributor1, &product_id, &contribution1_amount); // Fund it
+    assert_eq!(test.client.get_product(&product_id).status, ProductStatus::Funded);
+
+    let contribution2_amount = 100; // Trying to contribute again after funding
+    test.client
+        .mock_auths(&[MockAuth { address: &test.contributor2, invoke: &MockAuthInvoke { contract: &test.contract_id, fn_name: "contribute", args: vec![&test.env, test.contributor2.clone().into_val(&test.env), product_id.into_val(&test.env), contribution2_amount.into_val(&test.env)], sub_invokes: &[] } }])
+        .contribute(&test.contributor2, &product_id, &contribution2_amount); // Should panic
+}
