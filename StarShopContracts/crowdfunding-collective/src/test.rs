@@ -367,3 +367,21 @@ fn test_update_milestone_successful() {
     let milestones = test.client.get_milestones(&product_id);
     assert!(milestones.get(milestone_id_to_update).unwrap().completed);
 }
+
+#[test]
+#[should_panic(expected = "Only the creator can update milestones")]
+fn test_update_milestone_unauthorized_user_fails() {
+    let test = CrowdfundingTest::setup();
+    let product_id = create_test_product(&test, 100, 3600, None, None);
+    let contributor1_amount = 100;
+    test.client
+        .mock_auths(&[MockAuth { address: &test.contributor1, invoke: &MockAuthInvoke { contract: &test.contract_id, fn_name: "contribute", args: vec![&test.env, test.contributor1.clone().into_val(&test.env), product_id.into_val(&test.env), contributor1_amount.into_val(&test.env)], sub_invokes: &[] } }])
+        .contribute(&test.contributor1, &product_id, &contributor1_amount); // Fund
+    
+    let non_creator = Address::generate(&test.env);
+    let milestone_id = 0; // First milestone
+    // non_creator tries to update, should fail due to product.creator != creator check
+    test.client
+        .mock_auths(&[MockAuth { address: &non_creator, invoke: &MockAuthInvoke { contract: &test.contract_id, fn_name: "update_milestone", args: vec![&test.env, non_creator.into_val(&test.env), product_id.into_val(&test.env), milestone_id.into_val(&test.env)], sub_invokes: &[] } }])
+        .update_milestone(&non_creator, &product_id, &milestone_id);
+}
