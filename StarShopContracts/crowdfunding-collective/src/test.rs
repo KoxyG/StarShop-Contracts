@@ -445,3 +445,16 @@ fn test_distribute_funds_not_funded_fails() {
     let product_id = create_test_product(&test, 100, 3600, None, None); // Not funded
     test.client.distribute_funds(&product_id);
 }
+
+#[test]
+#[should_panic(expected = "Not all milestones are completed")]
+fn test_distribute_funds_milestones_not_completed_fails() {
+    let test = CrowdfundingTest::setup();
+    let product_id = create_test_product(&test, 100, 3600, None, None);
+    let contribute1_amount = 100;
+    test.client
+        .mock_auths(&[MockAuth { address: &test.contributor1, invoke: &MockAuthInvoke { contract: &test.contract_id, fn_name: "contribute", args: vec![&test.env, test.contributor1.clone().into_val(&test.env), product_id.into_val(&test.env), contribute1_amount.into_val(&test.env)], sub_invokes: &[] } }])
+        .contribute(&test.contributor1, &product_id, &contribute1_amount); // Fund it
+    // Milestones not completed
+    test.client.distribute_funds(&product_id);
+}
