@@ -226,7 +226,7 @@ fn test_create_product_past_deadline() {
         target_date: env.ledger().timestamp() + 100, // After product deadline
         completed: false,
     }];
-    
+
     // create_test_product uses env.ledger().timestamp() + offset, so we need to call client directly
      test.client
      .mock_auths(&[
@@ -259,3 +259,36 @@ fn test_create_product_past_deadline() {
             &milestones,
         );
 }
+
+#[test]
+fn test_contribute_successful_and_fund_product() {
+    let test = CrowdfundingTest::setup();
+    let env = &test.env;
+    let funding_goal = 1000;
+    let product_id = create_test_product(&test, funding_goal, 3600, None, None);
+    
+    let contribution1_amount = 600;
+    test.client
+        .mock_auths(&[MockAuth { address: &test.contributor1, invoke: &MockAuthInvoke { contract: &test.contract_id, fn_name: "contribute", args: vec![env, test.contributor1.clone().into_val(env), product_id.into_val(env), contribution1_amount.into_val(env)], sub_invokes: &[] } }])
+        .contribute(&test.contributor1, &product_id, &contribution1_amount);
+
+    let product_data = test.client.get_product(&product_id);
+    assert_eq!(product_data.total_funded, contribution1_amount);
+    assert_eq!(product_data.status, ProductStatus::Active);
+
+    let contributions = test.client.get_contributions(&product_id);
+    assert_eq!(contributions.len(), 1);
+    assert_eq!(contributions.get(0).unwrap().contributor, test.contributor1);
+    assert_eq!(contributions.get(0).unwrap().amount, contribution1_amount);
+
+    // Second contribution to meet the goal
+    let contribution2_amount = funding_goal - contribution1_amount; // 400
+    test.client
+        .mock_auths(&[MockAuth { address: &test.contributor2, invoke: &MockAuthInvoke { contract: &test.contract_id, fn_name: "contribute", args: vec![env, test.contributor2.clone().into_val(env), product_id.into_val(env), contribution2_amount.into_val(env)], sub_invokes: &[] } }])
+        .contribute(&test.contributor2, &product_id, &contribution2_amount);
+
+    let product_data_funded = test.client.get_product(&product_id);
+    assert_eq!(product_data_funded.total_funded, funding_goal);
+    assert_eq!(product_data_funded.status, ProductStatus::Funded);
+}
+
