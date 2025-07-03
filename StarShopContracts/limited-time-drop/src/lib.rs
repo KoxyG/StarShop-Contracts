@@ -97,4 +97,5 @@ impl LimitedTimeDropContract {
     }
 }
 
+#[cfg(test)]
 mod test;
