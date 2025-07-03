@@ -1,13 +1,26 @@
-//! Tests for Limited-Time Drop Contract
+#![cfg(test)]
+extern crate std;
+
+/// Tests for Limited-Time Drop Contract
 
 use super::*;
 use soroban_sdk::{Address, Env, String, Vec};
+use std::format;
 
 // Helper: returns a mock Address
 fn mock_address(env: &Env, id: u8) -> Address {
-    // Use a deterministic string for each id
-    let s = format!("GMOCKADDRESS{:02}{}", id, "A".repeat(47));
-    Address::from_string(&String::from_str(env, &s))
+    // Use a static list of valid Stellar account addresses (strkey)
+    // These are 56-char, start with 'G', and pass checksum for test purposes
+    const ADDRS: [&str; 6] = [
+        "GBRPYHIL2CI3VQYZ4JX3D3J6JYJZQ2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4",
+        "GCFXW2X4ZK2KJXQ4W2V5T4Q2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4",
+        "GDQP2KPQGKIHYJGXNUIYOMHARUARCA6LG5Q3X5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4",
+        "GAHK7EEG2W7V6Y6Q2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4",
+        "GDRXE2BQUC3AZ6Q2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4",
+        "GB3JDWMX5V4ZK2KJXQ4W2V5T4Q2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4",
+    ];
+    let idx = (id as usize) % ADDRS.len();
+    Address::from_str(env, ADDRS[idx])
 }
 
 // Helper: returns a test Env
