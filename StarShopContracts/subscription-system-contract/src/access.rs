@@ -25,8 +25,8 @@ fn require_role(env: &Env, role_key: RoleKey, user: &Address) {
 
 /// Add user to a role (Admin or Manager)
 pub fn add_role(env: &Env, role: Symbol, user: Address) {
-    let admin_sym = Symbol::new(env, "admin");
-    let manager_sym = Symbol::new(env, "manager");
+    let admin_sym = symbol_short!("admin");
+    let manager_sym = symbol_short!("manager");
 
     let key = match role {
         sym if sym == admin_sym => RoleKey::Admin,
@@ -84,7 +84,11 @@ pub fn access_gold_feature(env: &Env, user: Address, plan_id: Symbol) -> Symbol 
 
 /// Example 3: Admin-only reset logic
 pub fn admin_reset_subscription(env: &Env, caller: Address, target_user: Address, plan_id: Symbol) {
-    require_role(env, RoleKey::Admin, &caller);
+    // Use the same admin verification as plan management functions
+    let stored_admin: Address = env.storage().instance().get(&PlanKey::Admin).expect("admin not set");
+    if stored_admin != caller {
+        panic!("only admin can reset subscriptions");
+    }
 
     use crate::minting::MintKey;
 
