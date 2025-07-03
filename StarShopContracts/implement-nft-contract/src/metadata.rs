@@ -14,6 +14,8 @@ impl super::NFTContract {
         attributes: Vec<String>,
     ) {
         Self::check_admin(&env, &admin);
+        // SECURITY FIX: Require proper authentication to prevent unauthorized metadata updates
+        admin.require_auth();
 
         let mut nft: crate::NFTDetail = env
             .storage()

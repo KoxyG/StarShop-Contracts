@@ -14,9 +14,14 @@ impl super::NFTContract {
     ) -> u32 {
         to.require_auth();
 
-        let mut current_id: u32 = env.storage().instance().get(&COUNTER_KEY).unwrap();
-        current_id += 1;
-        env.storage().instance().set(&COUNTER_KEY, &current_id);
+        let current_id: u32 = env.storage().instance().get(&COUNTER_KEY).unwrap();
+        
+        // SECURITY FIX: Prevent integer overflow in token counter
+        // Check for overflow before incrementing to prevent wrapping to 0
+        let next_id = current_id.checked_add(1)
+            .expect("Token counter overflow: Maximum number of tokens (4,294,967,295) reached");
+        
+        env.storage().instance().set(&COUNTER_KEY, &next_id);
 
         let metadata = NFTMetadata {
             name,
@@ -29,8 +34,8 @@ impl super::NFTContract {
             metadata,
         };
 
-        env.storage().persistent().set(&current_id, &nft);
+        env.storage().persistent().set(&next_id, &nft);
 
-        current_id
+        next_id
     }
 }
