@@ -2,13 +2,8 @@
 mod tests {
     use crate::{NFTContract, NFTContractClient, NFTDetail, COUNTER_KEY};
     use soroban_sdk::{
-        testutils::{Address as _, MockAuth, MockAuthInvoke},
-        vec,
-        Address,
-        Env,
-        IntoVal,
-        String,
-        Vec,
+        testutils::{Address as _, MockAuth, MockAuthInvoke, Events},
+        vec, Address, Env, IntoVal, String, Vec,
     };
 
     fn setup() -> (Env, Address, NFTContractClient<'static>) {
@@ -30,63 +25,14 @@ mod tests {
         panic!("Must be called before testing the vulnerability");
     }
 
-    #[test]
-    fn test_critical_ms01_missing_admin_auth_vulnerability() {
-        let (env, contract_id, client) = setup();
-        let admin = Address::generate(&env);
-        let attacker = Address::generate(&env);
 
-        // Initialize contract with admin
-        client.initialize(&admin);
-
-        // Mint an NFT to create something to modify
-        env.mock_all_auths();
-        let token_id = client.mint_nft(
-            &admin,
-            &String::from_str(&env, "Original_NFT"),
-            &String::from_str(&env, "Original_description"),
-            &Vec::new(&env),
-        );
-
-        // CRITICAL VULNERABILITY: Attacker can update metadata without authentication!
-        // This should fail but WILL SUCCEED due to missing admin.require_auth()
-        
-        // Clear all auths to simulate real attack scenario
-        env.mock_all_auths_allowing_non_root_auth(); // This allows the attack
-
-        let malicious_name = String::from_str(&env, "HACKED_NFT");
-        let malicious_description = String::from_str(&env, "Attacker_controlled_metadata");
-        let mut malicious_attributes = Vec::new(&env);
-        malicious_attributes.push_back(String::from_str(&env, "stolen"));
-
-        // ATTACK: Attacker calls update_metadata with admin address but no authentication
-        // This SHOULD fail but WILL succeed due to missing require_auth()
-        client.update_metadata(
-            &admin,  // Attacker passes admin address
-            &token_id,
-            &malicious_name,
-            &malicious_description,
-            &malicious_attributes,
-        );
-
-        // Verify the attack succeeded - metadata was maliciously changed
-        let updated_metadata = client.get_metadata(&token_id);
-        
-        // This assertion will PASS, proving the vulnerability exists
-        assert_eq!(updated_metadata.name, malicious_name);
-        assert_eq!(updated_metadata.description, malicious_description);
-        assert_eq!(updated_metadata.attributes, malicious_attributes);
-        
-        // If we reach here, the vulnerability is confirmed!
-        panic!("CRITICAL VULNERABILITY CONFIRMED: Unauthorized metadata update succeeded!");
-    }
 
     // === SECURITY FIX VERIFICATION ===
     #[test]
     fn test_ms01_fix_shows_vulnerability_is_fixed() {
         // This test verifies that our fix (adding admin.require_auth()) works
         // We'll show that the original vulnerability test would now fail differently
-        
+
         // Test setup same as vulnerability test
         let (env, _contract_id, client) = setup();
         let admin = Address::generate(&env);
@@ -103,23 +49,22 @@ mod tests {
 
         // Now test with controlled auth mocking
         // Mock auth ONLY for the admin for a legitimate update
-        env.mock_auths(&[
-            MockAuth {
-                address: &admin,
-                invoke: &MockAuthInvoke {
-                    contract: &client.address,
-                    fn_name: "update_metadata",
-                    args: (
-                        &admin,
-                        token_id,
-                        String::from_str(&env, "Authorized_Update"),
-                        String::from_str(&env, "This_should_work"),
-                        Vec::<String>::new(&env),
-                    ).into_val(&env),
-                    sub_invokes: &[],
-                },
+        env.mock_auths(&[MockAuth {
+            address: &admin,
+            invoke: &MockAuthInvoke {
+                contract: &client.address,
+                fn_name: "update_metadata",
+                args: (
+                    &admin,
+                    token_id,
+                    String::from_str(&env, "Authorized_Update"),
+                    String::from_str(&env, "This_should_work"),
+                    Vec::<String>::new(&env),
+                )
+                    .into_val(&env),
+                sub_invokes: &[],
             },
-        ]);
+        }]);
 
         // This should succeed because we have proper auth
         client.update_metadata(
@@ -133,7 +78,7 @@ mod tests {
         // Verify legitimate update worked
         let metadata = client.get_metadata(&token_id);
         assert_eq!(metadata.name, String::from_str(&env, "Authorized_Update"));
-        
+
         // The difference is: now only AUTHORIZED calls work
         // The vulnerability is fixed because unauthorized calls will fail
     }
@@ -158,7 +103,7 @@ mod tests {
         // Authorized update with proper authentication should succeed
         let new_name = String::from_str(&env, "Updated_NFT");
         let new_description = String::from_str(&env, "Properly_updated");
-        
+
         client.update_metadata(
             &admin,
             &token_id,
@@ -444,18 +389,23 @@ mod tests {
         let (env, contract_id, client) = setup();
         let recipient = Address::generate(&env);
 
+        // Without admin initialization, minting should work (backwards compatibility)
+        // but with admin initialization, authorization should be required
+        let admin = Address::generate(&env);
+        client.initialize(&admin);
+
         let result = client.try_mint_nft(
             &recipient,
             &String::from_str(&env, "Unauthorized_NFT"),
             &String::from_str(&env, "Should_fail_without_auth"),
             &Vec::new(&env),
         );
-        assert!(result.is_err(), "Minting should fail without authorization");
+        assert!(result.is_err(), "Minting should fail without authorization when admin is set");
 
         env.mock_all_auths();
 
         let token_id = client.mint_nft(
-            &recipient,
+            &admin, // Use admin for authorized minting
             &String::from_str(&env, "Authorized_NFT"),
             &String::from_str(&env, "Should_succeed_with_auth"),
             &Vec::new(&env),
@@ -463,141 +413,147 @@ mod tests {
 
         env.as_contract(&contract_id, || {
             let nft: NFTDetail = env.storage().persistent().get(&token_id).unwrap();
-            assert_eq!(nft.owner, recipient, "NFT owner mismatch");
+            assert_eq!(nft.owner, admin, "NFT owner should be admin");
         });
 
         assert_eq!(token_id, 1, "First token ID should be 1");
     }
 
-    // === CRITICAL VULNERABILITY TEST: M-01 ===
+    // === SECURITY VALIDATION TESTS (SHOULD PASS WHEN FIXES ARE WORKING) ===
+
     #[test]
     fn test_critical_m01_integer_overflow_vulnerability() {
+        // This test verifies that integer overflow is properly prevented
         let (env, contract_id, client) = setup();
         let admin = Address::generate(&env);
 
-        // Initialize contract
         client.initialize(&admin);
-
         env.mock_all_auths();
 
-        // Set counter to near maximum u32 value to trigger overflow quickly
-        env.as_contract(&contract_id, || {
-            env.storage().instance().set(&COUNTER_KEY, &(u32::MAX - 1));
-        });
-
-        // Mint one NFT - this should set counter to u32::MAX
-        let token_id_1 = client.mint_nft(
-            &admin,
-            &String::from_str(&env, "NFT_Max"),
-            &String::from_str(&env, "Token_at_max_counter"),
-            &Vec::new(&env),
-        );
-
-        // Verify this NFT got token ID u32::MAX
-        assert_eq!(token_id_1, u32::MAX);
-
-        // Verify the NFT exists
-        let metadata_1 = client.get_metadata(&token_id_1);
-        assert_eq!(metadata_1.name, String::from_str(&env, "NFT_Max"));
-
-        // CRITICAL VULNERABILITY: Mint another NFT - this will cause counter overflow!
-        // The counter will wrap from u32::MAX to 0, potentially overwriting token 0
-        let token_id_2 = client.mint_nft(
-            &admin,
-            &String::from_str(&env, "NFT_Overflow"),
-            &String::from_str(&env, "This_causes_overflow"),
-            &Vec::new(&env),
-        );
-
-        // VULNERABILITY CONFIRMED: The new token should NOT get ID 0
-        // But due to overflow, it will wrap and potentially conflict with future tokens
-        
-        // If this assertion passes, the vulnerability is confirmed
-        // The counter wrapped around due to integer overflow
-        if token_id_2 == 0 {
-            panic!("CRITICAL VULNERABILITY CONFIRMED: Integer overflow caused counter to wrap to 0!");
-        }
-
-        // Additional check: verify the counter state
-        let final_counter: u32 = env.as_contract(&contract_id, || {
-            env.storage().instance().get(&COUNTER_KEY).unwrap_or(0)
-        });
-        
-        // If counter is 0 or 1, overflow occurred
-        if final_counter <= 1 {
-            panic!("CRITICAL VULNERABILITY CONFIRMED: Counter overflow detected!");
-        }
-
-        // If we reach here without panic, it means Rust caught the overflow
-        // This is still a vulnerability - the system should handle it gracefully
-        panic!("VULNERABILITY: System behavior on overflow is unpredictable");
-    }
-
-    // === SECURITY FIX VERIFICATION: M-01 ===
-    #[test]
-    #[should_panic(expected = "Token counter overflow: Maximum number of tokens (4,294,967,295) reached")]
-    fn test_m01_fix_handles_overflow_gracefully() {
-        let (env, contract_id, client) = setup();
-        let admin = Address::generate(&env);
-
-        // Initialize contract
-        client.initialize(&admin);
-
-        env.mock_all_auths();
-
-        // Set counter to maximum u32 value 
+        // Set counter to maximum u32 value to test overflow protection
         env.as_contract(&contract_id, || {
             env.storage().instance().set(&COUNTER_KEY, &u32::MAX);
         });
 
-        // FIXED BEHAVIOR: This should now panic with a clear, controlled error message
-        // instead of the generic "attempt to add with overflow" panic
+        // SECURITY TEST: This should panic with controlled error message (our fix working)
+        let result = client.try_mint_nft(
+            &admin,
+            &String::from_str(&env, "Should_Fail_Gracefully"),
+            &String::from_str(&env, "Overflow_protection_test"),
+            &Vec::new(&env),
+        );
+
+        // PASS: Our overflow protection is working if this fails with proper error
+        assert!(result.is_err(), "Overflow protection should prevent minting at u32::MAX");
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "Token counter overflow: Maximum number of tokens (4,294,967,295) reached"
+    )]
+    fn test_m01_fix_handles_overflow_gracefully() {
+        let (env, contract_id, client) = setup();
+        let admin = Address::generate(&env);
+
+        client.initialize(&admin);
+        env.mock_all_auths();
+
+        // Set counter to maximum u32 value
+        env.as_contract(&contract_id, || {
+            env.storage().instance().set(&COUNTER_KEY, &u32::MAX);
+        });
+
+        // This should panic with our specific error message
         client.mint_nft(
             &admin,
             &String::from_str(&env, "Should_Fail_Gracefully"),
             &String::from_str(&env, "Controlled_overflow_handling"),
             &Vec::new(&env),
         );
-
-        // Should never reach this line due to controlled overflow protection
     }
 
-    // === HIGH SEVERITY VULNERABILITY TESTS ===
-    
     #[test]
-    fn test_high_h01_no_input_validation_vulnerability() {
+    fn test_critical_ms01_missing_admin_auth_vulnerability() {
+        // This test verifies that admin authentication is properly enforced
         let (env, _contract_id, client) = setup();
         let admin = Address::generate(&env);
-        let user = Address::generate(&env);
+        let attacker = Address::generate(&env);
+
+        client.initialize(&admin);
+
+        // Mock auth only for admin for legitimate operations
+        env.mock_auths(&[soroban_sdk::testutils::MockAuth {
+            address: &admin,
+            invoke: &soroban_sdk::testutils::MockAuthInvoke {
+                contract: &client.address,
+                fn_name: "mint_nft",
+                args: (
+                    &admin,
+                    String::from_str(&env, "Legitimate_NFT"),
+                    String::from_str(&env, "Admin_authorized"),
+                    Vec::<String>::new(&env),
+                ).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+
+        // This should succeed - admin has proper auth
+        let token_id = client.mint_nft(
+            &admin,
+            &String::from_str(&env, "Legitimate_NFT"), 
+            &String::from_str(&env, "Admin_authorized"),
+            &Vec::new(&env),
+        );
+
+        // SECURITY TEST: Unauthorized update should fail
+        let unauthorized_result = client.try_update_metadata(
+            &attacker, // Not the admin
+            &token_id,
+            &String::from_str(&env, "Hacked"),
+            &String::from_str(&env, "Should_fail"),
+            &Vec::new(&env),
+        );
+
+        // PASS: Our auth protection is working if unauthorized access fails
+        assert!(unauthorized_result.is_err(), "Unauthorized metadata updates should be blocked");
+    }
+
+    #[test]
+    fn test_high_h01_no_input_validation_vulnerability() {
+        // This test verifies that input validation is working
+        let (env, _contract_id, client) = setup();
+        let admin = Address::generate(&env);
 
         client.initialize(&admin);
         env.mock_all_auths();
 
-        // HIGH VULNERABILITY H-01: No input validation on metadata size
-        // Create extremely large metadata that should be rejected but isn't
-        let huge_name = String::from_str(&env, "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"); // Long name
-        let huge_description = String::from_str(&env, "Very_long_description_that_should_be_limited_by_proper_input_validation_but_currently_is_not_because_the_contract_lacks_size_limits_on_metadata_fields");
-        let mut huge_attributes = Vec::new(&env);
-        
-        // Add many large attributes (potentially causing storage bloat)
-        for _i in 0..50 {
-            huge_attributes.push_back(String::from_str(&env, "attribute_with_very_long_content_that_should_be_limited_by_proper_validation"));
-        }
+        // Test oversized name (should be rejected) - create a 200-character string
+        let oversized_name = String::from_str(&env, "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
+        let result = client.try_mint_nft(
+            &admin,
+            &oversized_name,
+            &String::from_str(&env, "Valid_description"),
+            &Vec::new(&env),
+        );
 
-        // VULNERABILITY: Contract accepts unlimited metadata size
-        // This should fail due to size limits, but it succeeds
-        let token_id = client.mint_nft(&user, &huge_name, &huge_description, &huge_attributes);
+        // PASS: Our input validation is working if oversized input is rejected
+        assert!(result.is_err(), "Oversized names should be rejected by input validation");
 
-        // Verify the oversized data was stored (proving the vulnerability)
-        let metadata = client.get_metadata(&token_id);
-        assert_eq!(metadata.name.len(), huge_name.len());
-        assert_eq!(metadata.attributes.len(), 50u32);
+        // Test valid input (should succeed)
+        let valid_result = client.try_mint_nft(
+            &admin,
+            &String::from_str(&env, "Valid_Name"),
+            &String::from_str(&env, "Valid_description"),
+            &Vec::new(&env),
+        );
 
-        panic!("HIGH VULNERABILITY H-01 CONFIRMED: No input validation allows unlimited metadata storage!");
+        // PASS: Valid input should work
+        assert!(valid_result.is_ok(), "Valid input should be accepted");
     }
 
-    #[test]
+    #[test] 
     fn test_high_h02_no_address_validation_vulnerability() {
+        // This test verifies that address validation is working
         let (env, _contract_id, client) = setup();
         let admin = Address::generate(&env);
         let user = Address::generate(&env);
@@ -607,132 +563,155 @@ mod tests {
 
         // Mint an NFT first
         let token_id = client.mint_nft(
-            &user,
+            &admin,
             &String::from_str(&env, "Test_NFT"),
             &String::from_str(&env, "For_transfer_testing"),
             &Vec::new(&env),
         );
 
-        // HIGH VULNERABILITY H-02: No recipient address validation
-        // Test self-transfer (wasteful, should be prevented)
-        let self_transfer_result = client.try_transfer_nft(&user, &user, &token_id);
-        
-        // VULNERABILITY: Self-transfers are allowed (wasteful gas usage)
-        if self_transfer_result.is_ok() {
-            panic!("HIGH VULNERABILITY H-02 CONFIRMED: Self-transfers allowed, causing wasteful gas usage!");
-        }
+        // Transfer to a different user (should work)
+        let valid_transfer = client.try_transfer_nft(&admin, &user, &token_id);
+        assert!(valid_transfer.is_ok(), "Valid transfers should work");
 
-        // Test zero address transfer (if we had access to zero address)
-        // Note: In Soroban, we can't easily create a zero address in tests
-        // but the contract should validate addresses properly
+        // SECURITY TEST: Self-transfer should be blocked
+        let self_transfer_result = client.try_transfer_nft(&admin, &admin, &token_id);
 
-        // The vulnerability is that there's no address validation logic in the contract
-        panic!("HIGH VULNERABILITY H-02 CONFIRMED: No address validation in transfer functions!");
+        // PASS: Our address validation is working if self-transfers are blocked
+        assert!(self_transfer_result.is_err(), "Self-transfers should be blocked by address validation");
     }
 
     #[test]
     fn test_high_h03_missing_events_vulnerability() {
+        // This test verifies that events are being emitted
         let (env, _contract_id, client) = setup();
         let admin = Address::generate(&env);
-        let user1 = Address::generate(&env);
         let user2 = Address::generate(&env);
 
         client.initialize(&admin);
         env.mock_all_auths();
 
-        // HIGH VULNERABILITY H-03: Missing event emission
+        // Clear any existing events
+        let initial_events = env.events().all();
         
-        // Test 1: Minting should emit events but doesn't
+        // Test minting emits events
         let token_id = client.mint_nft(
-            &user1,
-            &String::from_str(&env, "Test_NFT"),
-            &String::from_str(&env, "Should_emit_mint_event"),
+            &admin,
+            &String::from_str(&env, "Event_Test_NFT"),
+            &String::from_str(&env, "Testing_events"),
             &Vec::new(&env),
         );
 
-        // Test 2: Transfer should emit events but doesn't  
-        client.transfer_nft(&user1, &user2, &token_id);
+        // Test transfer emits events  
+        client.transfer_nft(&admin, &user2, &token_id);
 
-        // Test 3: Metadata update should emit events but doesn't
+        // Test metadata update emits events
         client.update_metadata(
             &admin,
             &token_id,
-            &String::from_str(&env, "Updated_NFT"),
-            &String::from_str(&env, "Should_emit_update_event"),
+            &String::from_str(&env, "Updated"),
+            &String::from_str(&env, "New_description"),
             &Vec::new(&env),
         );
 
-        // Test 4: Burn should emit events but doesn't
-        let burn_token = client.mint_nft(
-            &user1,
-            &String::from_str(&env, "Burn_Test"),
-            &String::from_str(&env, "Will_be_burned"),
-            &Vec::new(&env),
-        );
-        client.burn_nft(&user1, &burn_token);
+        // Get all events after operations
+        let final_events = env.events().all();
 
-        // VULNERABILITY: No events are emitted for any operations
-        // This makes tracking, monitoring, and off-chain integration extremely difficult
-        panic!("HIGH VULNERABILITY H-03 CONFIRMED: No events emitted for mint, transfer, update, or burn operations!");
+        // PASS: Our event emissions are working if we have more events than before
+        assert!(final_events.len() > initial_events.len(), "Operations should emit events");
+        
+        // The test passes if events are being emitted (which they are)
     }
 
     #[test]
     fn test_high_h04_no_supply_limits_vulnerability() {
+        // This test verifies that supply limits are working
         let (env, _contract_id, client) = setup();
         let admin = Address::generate(&env);
-        let user = Address::generate(&env);
 
         client.initialize(&admin);
         env.mock_all_auths();
 
-        // HIGH VULNERABILITY H-04: No maximum supply limits
-        // Mint a large number of NFTs without any restrictions
-        let mut token_ids = Vec::new(&env);
+        // Set a low supply limit for testing
+        client.set_max_supply(&admin, &2u32);
+
+        // Mint up to the limit (should work)
+        let token1 = client.mint_nft(
+            &admin,
+            &String::from_str(&env, "NFT_1"),
+            &String::from_str(&env, "First"),
+            &Vec::new(&env),
+        );
         
-        for _i in 1..=100 {
-            let token_id = client.mint_nft(
-                &user,
-                &String::from_str(&env, "Mass_Minted_NFT"),
-                &String::from_str(&env, "This_should_be_limited_by_supply_controls"),
-                &Vec::new(&env),
-            );
-            token_ids.push_back(token_id);
-        }
+        let token2 = client.mint_nft(
+            &admin,
+            &String::from_str(&env, "NFT_2"), 
+            &String::from_str(&env, "Second"),
+            &Vec::new(&env),
+        );
 
-        // VULNERABILITY: Contract allows unlimited minting
-        // There should be configurable supply limits
-        assert_eq!(token_ids.len(), 100u32);
+        assert_eq!(token1, 1);
+        assert_eq!(token2, 2);
 
-        panic!("HIGH VULNERABILITY H-04 CONFIRMED: No supply limits allow unlimited minting!");
+        // SECURITY TEST: Exceeding supply limit should fail
+        let result = client.try_mint_nft(
+            &admin,
+            &String::from_str(&env, "NFT_3"),
+            &String::from_str(&env, "Should_fail"),
+            &Vec::new(&env),
+        );
+
+        // PASS: Our supply limits are working if excess minting is blocked
+        assert!(result.is_err(), "Minting beyond supply limit should be blocked");
     }
 
     #[test]
     fn test_high_h05_no_minting_controls_vulnerability() {
+        // This test verifies that minting controls are working  
         let (env, _contract_id, client) = setup();
         let admin = Address::generate(&env);
-        let random_user = Address::generate(&env);
+        let unauthorized_user = Address::generate(&env);
 
         client.initialize(&admin);
-        env.mock_all_auths();
 
-        // HIGH VULNERABILITY H-05: No minting access controls
-        // Any user can mint NFTs without admin approval
-        let unauthorized_mint = client.mint_nft(
-            &random_user,
-            &String::from_str(&env, "Unauthorized_NFT"),
-            &String::from_str(&env, "Minted_by_anyone"),
+        // Mock auth only for admin
+        env.mock_auths(&[soroban_sdk::testutils::MockAuth {
+            address: &admin,
+            invoke: &soroban_sdk::testutils::MockAuthInvoke {
+                contract: &client.address,
+                fn_name: "mint_nft",
+                args: (
+                    &admin,
+                    String::from_str(&env, "Admin_NFT"),
+                    String::from_str(&env, "Authorized_mint"),
+                    Vec::<String>::new(&env),
+                ).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+
+        // Admin minting should work
+        let admin_mint = client.mint_nft(
+            &admin,
+            &String::from_str(&env, "Admin_NFT"),
+            &String::from_str(&env, "Authorized_mint"),
+            &Vec::new(&env),
+        );
+        assert!(admin_mint > 0, "Admin should be able to mint");
+
+        // SECURITY TEST: Non-admin minting should fail
+        let unauthorized_result = client.try_mint_nft(
+            &unauthorized_user,
+            &String::from_str(&env, "Unauthorized_NFT"), 
+            &String::from_str(&env, "Should_fail"),
             &Vec::new(&env),
         );
 
-        // VULNERABILITY: Anyone can mint NFTs
-        // There should be admin-only minting or allowlist controls
-        assert!(unauthorized_mint > 0);
-
-        panic!("HIGH VULNERABILITY H-05 CONFIRMED: No minting access controls - anyone can mint NFTs!");
+        // PASS: Our minting controls are working if unauthorized minting is blocked
+        assert!(unauthorized_result.is_err(), "Unauthorized users should not be able to mint");
     }
 
     // === COMPREHENSIVE EDGE CASE TESTS ===
-    
+
     #[test]
     fn test_edge_case_token_id_boundary_conditions() {
         let (env, _contract_id, client) = setup();
@@ -751,9 +730,19 @@ mod tests {
         assert!(max_id_result.is_err(), "Max u32 token ID should not exist");
 
         // Verify normal minting creates sequential IDs starting from 1
-        let token_id_1 = client.mint_nft(&user, &String::from_str(&env, "NFT_1"), &String::from_str(&env, "First"), &Vec::new(&env));
-        let token_id_2 = client.mint_nft(&user, &String::from_str(&env, "NFT_2"), &String::from_str(&env, "Second"), &Vec::new(&env));
-        
+        let token_id_1 = client.mint_nft(
+            &user,
+            &String::from_str(&env, "NFT_1"),
+            &String::from_str(&env, "First"),
+            &Vec::new(&env),
+        );
+        let token_id_2 = client.mint_nft(
+            &user,
+            &String::from_str(&env, "NFT_2"),
+            &String::from_str(&env, "Second"),
+            &Vec::new(&env),
+        );
+
         assert_eq!(token_id_1, 1u32);
         assert_eq!(token_id_2, 2u32);
     }
@@ -762,29 +751,33 @@ mod tests {
     fn test_edge_case_empty_metadata_handling() {
         let (env, _contract_id, client) = setup();
         let admin = Address::generate(&env);
-        let user = Address::generate(&env);
 
         client.initialize(&admin);
         env.mock_all_auths();
 
-        // Test minting with empty metadata
+        // SECURITY TEST: Minting with empty metadata should be rejected by input validation
         let empty_name = String::from_str(&env, "");
         let empty_description = String::from_str(&env, "");
         let empty_attributes = Vec::new(&env);
 
-        let token_id = client.mint_nft(&user, &empty_name, &empty_description, &empty_attributes);
-
-        // Verify empty metadata is stored (potential issue)
-        let metadata = client.get_metadata(&token_id);
-        assert_eq!(metadata.name.len(), 0u32);
-        assert_eq!(metadata.description.len(), 0u32);
-        assert_eq!(metadata.attributes.len(), 0u32);
-
-        // Test updating to empty metadata
-        client.update_metadata(&admin, &token_id, &empty_name, &empty_description, &empty_attributes);
+        let result = client.try_mint_nft(&admin, &empty_name, &empty_description, &empty_attributes);
         
-        let updated_metadata = client.get_metadata(&token_id);
-        assert_eq!(updated_metadata.name.len(), 0u32);
+        // PASS: Our input validation is working if empty names are rejected
+        assert!(result.is_err(), "Empty names should be rejected by input validation");
+
+        // Test with valid minimal metadata (should work)
+        let valid_name = String::from_str(&env, "Valid");
+        let token_id = client.mint_nft(&admin, &valid_name, &empty_description, &empty_attributes);
+
+        // Test updating to empty metadata should also be rejected
+        let update_result = client.try_update_metadata(
+            &admin,
+            &token_id,
+            &empty_name,
+            &empty_description,
+            &empty_attributes,
+        );
+        assert!(update_result.is_err(), "Updates to empty names should be rejected");
     }
 
     #[test]
@@ -799,13 +792,18 @@ mod tests {
         env.mock_all_auths();
 
         // Mint NFT to user1
-        let token_id = client.mint_nft(&user1, &String::from_str(&env, "Transfer_Test"), &String::from_str(&env, "Multiple_transfers"), &Vec::new(&env));
+        let token_id = client.mint_nft(
+            &user1,
+            &String::from_str(&env, "Transfer_Test"),
+            &String::from_str(&env, "Multiple_transfers"),
+            &Vec::new(&env),
+        );
 
         // Transfer from user1 to user2
         client.transfer_nft(&user1, &user2, &token_id);
 
         // Verify ownership changed
-        let metadata_after_1st = client.get_metadata(&token_id);
+        let _metadata_after_1st = client.get_metadata(&token_id);
         // Note: We can't easily verify owner in this test setup, but the transfer succeeded
 
         // Transfer from user2 to user3
@@ -813,7 +811,10 @@ mod tests {
 
         // Test that user1 can no longer transfer (no longer owner)
         let unauthorized_result = client.try_transfer_nft(&user1, &user2, &token_id);
-        assert!(unauthorized_result.is_err(), "Previous owner should not be able to transfer");
+        assert!(
+            unauthorized_result.is_err(),
+            "Previous owner should not be able to transfer"
+        );
     }
 
     #[test]
@@ -826,8 +827,13 @@ mod tests {
         env.mock_all_auths();
 
         // Mint and burn NFT
-        let token_id = client.mint_nft(&user, &String::from_str(&env, "Burn_Test"), &String::from_str(&env, "Will_be_deleted"), &Vec::new(&env));
-        
+        let token_id = client.mint_nft(
+            &user,
+            &String::from_str(&env, "Burn_Test"),
+            &String::from_str(&env, "Will_be_deleted"),
+            &Vec::new(&env),
+        );
+
         // Verify it exists before burning
         let metadata_before = client.try_get_metadata(&token_id);
         assert!(metadata_before.is_ok(), "NFT should exist before burning");
@@ -837,7 +843,10 @@ mod tests {
 
         // Test accessing burned NFT
         let metadata_after = client.try_get_metadata(&token_id);
-        assert!(metadata_after.is_err(), "Burned NFT should not be accessible");
+        assert!(
+            metadata_after.is_err(),
+            "Burned NFT should not be accessible"
+        );
 
         // Test transferring burned NFT
         let transfer_burned = client.try_transfer_nft(&user, &admin, &token_id);
@@ -859,21 +868,44 @@ mod tests {
         env.mock_all_auths();
 
         // Mint NFT as user
-        let token_id = client.mint_nft(&user, &String::from_str(&env, "Admin_Test"), &String::from_str(&env, "Original"), &Vec::new(&env));
+        let token_id = client.mint_nft(
+            &user,
+            &String::from_str(&env, "Admin_Test"),
+            &String::from_str(&env, "Original"),
+            &Vec::new(&env),
+        );
 
         // Admin updates metadata
-        client.update_metadata(&admin, &token_id, &String::from_str(&env, "Updated_By_Admin"), &String::from_str(&env, "Admin_modified"), &Vec::new(&env));
+        client.update_metadata(
+            &admin,
+            &token_id,
+            &String::from_str(&env, "Updated_By_Admin"),
+            &String::from_str(&env, "Admin_modified"),
+            &Vec::new(&env),
+        );
 
         // Verify update succeeded
         let metadata = client.get_metadata(&token_id);
         assert_eq!(metadata.name, String::from_str(&env, "Updated_By_Admin"));
 
         // Test non-admin attempting metadata update
-        let unauthorized_update = client.try_update_metadata(&non_admin, &token_id, &String::from_str(&env, "Hacker"), &String::from_str(&env, "Should_fail"), &Vec::new(&env));
-        assert!(unauthorized_update.is_err(), "Non-admin should not be able to update metadata");
+        let unauthorized_update = client.try_update_metadata(
+            &non_admin,
+            &token_id,
+            &String::from_str(&env, "Hacker"),
+            &String::from_str(&env, "Should_fail"),
+            &Vec::new(&env),
+        );
+        assert!(
+            unauthorized_update.is_err(),
+            "Non-admin should not be able to update metadata"
+        );
 
         // Verify metadata unchanged after failed update
         let metadata_unchanged = client.get_metadata(&token_id);
-        assert_eq!(metadata_unchanged.name, String::from_str(&env, "Updated_By_Admin"));
+        assert_eq!(
+            metadata_unchanged.name,
+            String::from_str(&env, "Updated_By_Admin")
+        );
     }
 }
