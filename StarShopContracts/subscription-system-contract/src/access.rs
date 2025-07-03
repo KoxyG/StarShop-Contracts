@@ -25,8 +25,8 @@ fn require_role(env: &Env, role_key: RoleKey, user: &Address) {
 
 /// Add user to a role (Admin or Manager)
 pub fn add_role(env: &Env, role: Symbol, user: Address) {
-    let admin_sym = symbol_short!("admin");
-    let manager_sym = symbol_short!("manager");
+    let admin_sym = Symbol::new(env, "admin");
+    let manager_sym = Symbol::new(env, "manager");
 
     let key = match role {
         sym if sym == admin_sym => RoleKey::Admin,
