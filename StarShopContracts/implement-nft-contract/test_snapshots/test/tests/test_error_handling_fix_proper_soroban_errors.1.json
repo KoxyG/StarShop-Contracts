@@ -1,9 +1,10 @@
 {
   "generators": {
-    "address": 3,
+    "address": 4,
     "nonce": 0
   },
   "auth": [
+    [],
     [],
     [],
     [],
@@ -21,10 +22,10 @@
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M"
                 },
                 {
-                  "string": "Authorized_NFT"
+                  "string": "Test_NFT"
                 },
                 {
-                  "string": "Should_succeed_with_auth"
+                  "string": "For_error_testing"
                 },
                 {
                   "vec": []
@@ -90,7 +91,7 @@
                               "symbol": "description"
                             },
                             "val": {
-                              "string": "Should_succeed_with_auth"
+                              "string": "For_error_testing"
                             }
                           },
                           {
@@ -98,7 +99,7 @@
                               "symbol": "name"
                             },
                             "val": {
-                              "string": "Authorized_NFT"
+                              "string": "Test_NFT"
                             }
                           }
                         ]
@@ -149,7 +150,7 @@
                           "symbol": "ADMIN"
                         },
                         "val": {
-                          "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M"
+                          "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
                         }
                       },
                       {
