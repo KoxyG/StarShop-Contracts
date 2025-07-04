@@ -1,15 +1,14 @@
 use crate::{
     datatypes::{DataKey, Payment, PaymentEscrowError, PaymentStatus},
-    interface::PaymentEscrowInterface,
-    PaymentEscrowContract,  PaymentEscrowContractClient, PaymentEscrowContractArgs
+    interface::PaymentInterface,
+    PaymentEscrowContract, PaymentEscrowContractClient, PaymentEscrowContractArgs
 };
 use soroban_sdk::token::Client as TokenClient;
 use soroban_sdk::{contractimpl, symbol_short, String, Address, Env, Vec};
 
 
-
 #[contractimpl]
-impl PaymentEscrowInterface for PaymentEscrowContract {
+impl PaymentInterface for PaymentEscrowContract {
     fn get_payment_count(env: &Env) -> u128 {
         env.storage()
             .persistent()
@@ -106,7 +105,7 @@ impl PaymentEscrowInterface for PaymentEscrowContract {
     }
 
 
-    fn get_payment(env: Env, payment_id: u128) -> Result<Payment, PaymentEscrowError> {
+    fn get_a_payment(env: Env, payment_id: u128) -> Result<Payment, PaymentEscrowError> {
         env.storage()
             .persistent()
             .get(&payment_id)
