@@ -1,6 +1,6 @@
 #![no_std]
-use soroban_sdk::{contract, contractimpl, Env, Address, Vec};
-use crate::datatypes::DataKey;
+use soroban_sdk::{contract, contractimpl, Env, Address, Vec, BytesN};
+use crate::datatypes::{DataKey, PaymentEscrowError};
 
 
 #[contract]
@@ -8,10 +8,28 @@ pub struct PaymentEscrowContract;
 
 #[contractimpl]
 impl PaymentEscrowContract {
-    pub fn __constructor(env: Env, admin: Address) {
-        let mut admins = Vec::new(&env);
-        admins.push_back(admin);
-        env.storage().persistent().set(&DataKey::Admin, &admins);
+    pub fn init(env: Env, arbitrator: Address) -> Result<(), PaymentEscrowError> {
+        // Check if contract is already initialized
+        if env.storage().instance().has(&DataKey::Arbitrator) {
+            return Err(PaymentEscrowError::AlreadyInitialized);
+        }
+
+        let mut arbitrators = Vec::new(&env);
+        arbitrators.push_back(arbitrator);
+        env.storage().persistent().set(&DataKey::Arbitrator, &arbitrators);
+
+        Ok(())
+    }
+
+    pub fn version() -> u32 {
+        1
+    }
+
+    pub fn upgrade(e: Env, new_wasm_hash: BytesN<32>) {
+        let arbitrators: Vec<Address> = e.storage().instance().get(&DataKey::Arbitrator).unwrap();
+        arbitrators.iter().for_each(|a| a.require_auth());
+
+        e.deployer().update_current_contract_wasm(new_wasm_hash);
     }
 }
 

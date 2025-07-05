@@ -4,7 +4,7 @@ use crate::{
     PaymentEscrowContract, PaymentEscrowContractClient, PaymentEscrowContractArgs
 };
 use soroban_sdk::token::Client as TokenClient;
-use soroban_sdk::{contractimpl, symbol_short, String, Address, Env, Vec};
+use soroban_sdk::{contractimpl,  symbol_short, String, Address, Env};
 
 
 #[contractimpl]
@@ -28,10 +28,6 @@ impl PaymentInterface for PaymentEscrowContract {
         // Authentication
         buyer.require_auth();
 
-        // add buyeraddress to the datakey
-        env.storage()
-            .persistent()
-            .set(&DataKey::Buyer(buyer.clone()), &true);
 
         // Validate inputs
         if amount <= 0 {
@@ -61,9 +57,6 @@ impl PaymentInterface for PaymentEscrowContract {
         if buyer_balance < amount {
             return Err(PaymentEscrowError::InsufficientFunds);
         }
-        if amount <= 0 {
-            return Err(PaymentEscrowError::InvalidAmount);
-        }
 
         let transfer_result =
             token_client.transfer(&buyer, &env.current_contract_address(), &amount);
@@ -73,7 +66,7 @@ impl PaymentInterface for PaymentEscrowContract {
 
         // Create payment struct
         let payment = Payment {
-            id: payment_id as u64,
+            id: payment_id,
             buyer,
             seller,
             amount,
@@ -94,7 +87,7 @@ impl PaymentInterface for PaymentEscrowContract {
 
         // Store payment
         env.storage()
-            .instance()
+            .persistent()
             .set(&payment_id, &payment);
 
          env.events()

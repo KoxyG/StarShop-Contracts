@@ -4,22 +4,16 @@ use soroban_sdk::{
 };
 
 
-// pub(crate) const DAY_IN_LEDGERS: u32 = 17280;
-// pub(crate) const INSTANCE_BUMP_AMOUNT: u32 = 7 * DAY_IN_LEDGERS;
-// pub(crate) const INSTANCE_LIFETIME_THRESHOLD: u32 = INSTANCE_BUMP_AMOUNT - DAY_IN_LEDGERS;
-
 #[derive(Clone)]
 #[contracttype]
 pub enum DataKey {
     Escrow(String),
     Balance(Address),
     Allowance(AllowanceDataKey),
-    Admin,
+    Arbitrator,
     DisputedPayments,
-    Seller(Address),
     SellerRegId(Address),
     PaymentCounter,
-    Buyer(Address),
 }
 
 // Error definitions
@@ -36,6 +30,15 @@ pub enum PaymentEscrowError {
     CannotPaySelf = 7,
     DepositPaymentFailed = 8,
     NotFound = 9,
+    NotDelivered = 10,
+    NotCompleted = 11,
+    NotValid = 12,
+    DisputePeriodExpired = 13,
+    AlreadyDisputed = 14,
+    NotArbitrator = 15,
+    NotExpired = 16,
+    NotSeller = 17,
+    ArbitratorAlreadyExists = 18,
 }
 
 // Status Enum
@@ -43,6 +46,7 @@ pub enum PaymentEscrowError {
 #[derive(Clone, PartialEq, Debug)]
 pub enum PaymentStatus {
     Pending,      // Funds held in contract
+    Delivered,    // Buyer has confirmed delivery
     Completed,    // Funds released to seller
     Disputed,     // Funds locked, awaiting resolution
     Refunded,     // Funds returned to buyer
@@ -80,7 +84,7 @@ pub struct DisputeResolvedEvent {
 #[contracttype]
 #[derive(Clone, Debug)]
 pub struct Payment {
-    pub id: u64,
+    pub id: u128,
     pub buyer: Address,
     pub seller: Address,
     pub amount: i128,
