@@ -1,14 +1,17 @@
 use crate::{
     datatypes::{DataKey, PaymentEscrowError},
     interface::ArbitratorInterface,
-    PaymentEscrowContract, PaymentEscrowContractClient, PaymentEscrowContractArgs
+    PaymentEscrowContract, PaymentEscrowContractArgs, PaymentEscrowContractClient,
 };
 use soroban_sdk::{contractimpl, symbol_short, Address, Env, Vec};
 
-
 #[contractimpl]
 impl ArbitratorInterface for PaymentEscrowContract {
-    fn add_arbitrator(env: Env, arbitrator: Address, new_arbitrator: Address) -> Result<(), PaymentEscrowError> {
+    fn add_arbitrator(
+        env: Env,
+        arbitrator: Address,
+        new_arbitrator: Address,
+    ) -> Result<(), PaymentEscrowError> {
         // Authentication - new Arbitrator must authorize this transaction
         arbitrator.require_auth();
 
@@ -19,12 +22,14 @@ impl ArbitratorInterface for PaymentEscrowContract {
             .get(&DataKey::Arbitrator)
             .ok_or(PaymentEscrowError::NotFound)?;
 
-        // Check if the arbitrator is already in the list
-        if arbitrators.contains(&arbitrator) {
+
+        // Check if the arbitrator is authorized
+        if !arbitrators.contains(&arbitrator) {
             return Err(PaymentEscrowError::NotArbitrator);
         }
 
-        if !arbitrators.contains(&new_arbitrator) {
+        // Check if new arbitrator already exists
+        if arbitrators.contains(&new_arbitrator) {
             return Err(PaymentEscrowError::ArbitratorAlreadyExists);
         }
 
@@ -35,11 +40,13 @@ impl ArbitratorInterface for PaymentEscrowContract {
             .set(&DataKey::Arbitrator, &arbitrators);
 
         // Publish event
-        env.events().publish((symbol_short!("new_arb"), new_arbitrator.clone()), arbitrator.clone());
+        env.events().publish(
+            (symbol_short!("new_arb"), new_arbitrator.clone()),
+            arbitrator.clone(),
+        );
 
         Ok(())
-    }   
-
+    }
 
     fn get_arbitrators(env: Env) -> Result<Vec<Address>, PaymentEscrowError> {
         // Get the arbitrators from storage
@@ -52,7 +59,11 @@ impl ArbitratorInterface for PaymentEscrowContract {
         Ok(arbitrators)
     }
 
-    fn transfer_arbitrator_rights(env: Env, old_arbitrator: Address, new_arbitrator: Address) -> Result<(), PaymentEscrowError> {
+    fn transfer_arbitrator_rights(
+        env: Env,
+        old_arbitrator: Address,
+        new_arbitrator: Address,
+    ) -> Result<(), PaymentEscrowError> {
         // Authentication - new arbitrator must authorize this transaction
         old_arbitrator.require_auth();
 
@@ -89,11 +100,14 @@ impl ArbitratorInterface for PaymentEscrowContract {
 
         // Publish event
         env.events().publish(
-            (symbol_short!("xfer_arb"), old_arbitrator.clone(), new_arbitrator.clone()), 
-            new_arbitrator
+            (
+                symbol_short!("xfer_arb"),
+                old_arbitrator.clone(),
+                new_arbitrator.clone(),
+            ),
+            new_arbitrator,
         );
 
         Ok(())
     }
-    
 }

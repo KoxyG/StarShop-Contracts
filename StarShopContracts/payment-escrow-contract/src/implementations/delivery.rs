@@ -75,11 +75,17 @@ impl DeliveryInterface for PaymentEscrowContract {
             .get(&payment_id)
             .ok_or(PaymentEscrowError::NotFound)?;
 
+        // Check if payment is in correct status
+        if payment.status != PaymentStatus::Pending {
+            return Err(PaymentEscrowError::NotValid);
+        }
+
+        // Create updated payment with Delivered status
+
         // Check if the caller is actually the seller
         if payment.seller != seller {
             return Err(PaymentEscrowError::UnauthorizedAccess);
         }
-
 
         // Create updated payment with Delivered status
         let updated_payment = Payment {
@@ -106,7 +112,7 @@ impl DeliveryInterface for PaymentEscrowContract {
         // Get the payment from storage
         let payment: Payment = env
             .storage()
-            .instance()
+            .persistent()
             .get(&payment_id)
             .ok_or(PaymentEscrowError::NotFound)?;
 
@@ -121,7 +127,7 @@ impl DeliveryInterface for PaymentEscrowContract {
         // Get the payment from storage
         let payment: Payment = env
             .storage()
-            .instance()
+            .persistent()
             .get(&payment_id)
             .ok_or(PaymentEscrowError::NotFound)?;
 
