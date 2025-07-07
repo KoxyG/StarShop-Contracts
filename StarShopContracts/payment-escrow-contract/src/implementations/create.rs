@@ -1,11 +1,10 @@
 use crate::{
     datatypes::{DataKey, Payment, PaymentEscrowError, PaymentStatus},
     interface::PaymentInterface,
-    PaymentEscrowContract, PaymentEscrowContractClient, PaymentEscrowContractArgs
+    PaymentEscrowContract, PaymentEscrowContractArgs, PaymentEscrowContractClient,
 };
 use soroban_sdk::token::Client as TokenClient;
-use soroban_sdk::{contractimpl,  symbol_short, String, Address, Env};
-
+use soroban_sdk::{contractimpl, symbol_short, Address, Env, String};
 
 #[contractimpl]
 impl PaymentInterface for PaymentEscrowContract {
@@ -27,7 +26,6 @@ impl PaymentInterface for PaymentEscrowContract {
     ) -> Result<u128, PaymentEscrowError> {
         // Authentication
         buyer.require_auth();
-
 
         // Validate inputs
         if amount <= 0 {
@@ -58,11 +56,7 @@ impl PaymentInterface for PaymentEscrowContract {
             return Err(PaymentEscrowError::InsufficientFunds);
         }
 
-        let transfer_result =
-            token_client.transfer(&buyer, &env.current_contract_address(), &amount);
-        if transfer_result != () {
-            return Err(PaymentEscrowError::DepositPaymentFailed);
-        }
+        token_client.transfer(&buyer, &env.current_contract_address(), &amount);
 
         // Create payment struct
         let payment = Payment {
@@ -78,25 +72,21 @@ impl PaymentInterface for PaymentEscrowContract {
             description,
         };
 
-    
-
         // Update payment counter
         env.storage()
             .persistent()
             .set(&DataKey::PaymentCounter, &payment_id);
 
         // Store payment
-        env.storage()
-            .persistent()
-            .set(&payment_id, &payment);
+        env.storage().persistent().set(&payment_id, &payment);
 
-         env.events()
-         .publish((DataKey::PaymentCounter, symbol_short!("payment")), payment_id);
-
+        env.events().publish(
+            (DataKey::PaymentCounter, symbol_short!("payment")),
+            payment_id,
+        );
 
         Ok(payment_id as u128)
     }
-
 
     fn get_a_payment(env: Env, payment_id: u128) -> Result<Payment, PaymentEscrowError> {
         env.storage()

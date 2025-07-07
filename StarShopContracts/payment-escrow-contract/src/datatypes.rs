@@ -12,6 +12,7 @@ pub enum DataKey {
     Allowance(AllowanceDataKey),
     Arbitrator,
     DisputedPayments,
+    ResolvedDisputes,
     SellerRegId(Address),
     PaymentCounter,
 }
@@ -110,4 +111,16 @@ pub struct AllowanceValue {
 pub struct AllowanceDataKey {
     pub from: Address,
     pub spender: Address,
+}
+
+#[contracttype]
+#[derive(Clone)]
+pub struct DeliveryDetails {
+    pub payment_id: u128,
+    pub buyer: Address,
+    pub seller: Address,
+    pub status: PaymentStatus,
+    pub created_at: u64,
+    pub expiry: u64,
+    pub description: String,
 }

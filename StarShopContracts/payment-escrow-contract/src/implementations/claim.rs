@@ -33,12 +33,8 @@ impl ClaimInterface for PaymentEscrowContract {
         // Create token client
         let token_client = TokenClient::new(&env, &payment.token);
 
-        let transfer_result =
-            token_client.transfer(&env.current_contract_address(), &payment.buyer,
-            &payment.amount,);
-        if transfer_result != () {
-            return Err(PaymentEscrowError::TransferFailed);
-        }
+        token_client.transfer(&env.current_contract_address(), &payment.buyer,
+            &payment.amount);
 
         // Update payment status to Refunded
         let updated_payment = Payment {

@@ -8,8 +8,8 @@ use soroban_sdk::{contractimpl, symbol_short, Address, Env, Vec};
 
 #[contractimpl]
 impl ArbitratorInterface for PaymentEscrowContract {
-    fn add_arbitrator(env: Env, arbitrator: Address) -> Result<(), PaymentEscrowError> {
-        // Authentication - admin must authorize this transaction
+    fn add_arbitrator(env: Env, arbitrator: Address, new_arbitrator: Address) -> Result<(), PaymentEscrowError> {
+        // Authentication - new Arbitrator must authorize this transaction
         arbitrator.require_auth();
 
         // Get the arbitrators from storage
@@ -24,47 +24,22 @@ impl ArbitratorInterface for PaymentEscrowContract {
             return Err(PaymentEscrowError::NotArbitrator);
         }
 
+        if !arbitrators.contains(&new_arbitrator) {
+            return Err(PaymentEscrowError::ArbitratorAlreadyExists);
+        }
+
         // Add the arbitrator to the list
-        arbitrators.push_back(arbitrator.clone());
+        arbitrators.push_back(new_arbitrator.clone());
         env.storage()
             .persistent()
             .set(&DataKey::Arbitrator, &arbitrators);
 
         // Publish event
-        env.events().publish((symbol_short!("new_arb"), arbitrator.clone()), arbitrator.clone());
+        env.events().publish((symbol_short!("new_arb"), new_arbitrator.clone()), arbitrator.clone());
 
         Ok(())
     }   
 
-    fn remove_arbitrator(env: Env, arbitrator: Address) -> Result<(), PaymentEscrowError> {
-        // Authentication - admin must authorize this transaction
-        arbitrator.require_auth();
-
-        // Get the arbitrators from storage
-        let arbitrators: Vec<Address> = env
-            .storage()
-            .persistent()
-            .get(&DataKey::Arbitrator)
-            .ok_or(PaymentEscrowError::NotFound)?;
-
-        // Check if the arbitrator is in the list
-        if !arbitrators.contains(&arbitrator) {
-            return Err(PaymentEscrowError::NotArbitrator);
-        }
-
-        // Remove the arbitrator from the list
-        let mut new_arbitrators = Vec::new(&env);
-        for a in arbitrators.iter() {
-            if a != arbitrator {
-                new_arbitrators.push_back(a);
-            }
-        }
-        env.storage()
-            .persistent()
-            .set(&DataKey::Arbitrator, &new_arbitrators);
-
-        Ok(())
-    }
 
     fn get_arbitrators(env: Env) -> Result<Vec<Address>, PaymentEscrowError> {
         // Get the arbitrators from storage

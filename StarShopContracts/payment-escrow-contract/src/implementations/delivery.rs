@@ -1,15 +1,18 @@
 use crate::{
-    datatypes::{Payment, PaymentEscrowError, PaymentStatus},
+    datatypes::{DeliveryDetails, Payment, PaymentEscrowError, PaymentStatus},
     interface::DeliveryInterface,
-    PaymentEscrowContract, PaymentEscrowContractClient, PaymentEscrowContractArgs
+    PaymentEscrowContract, PaymentEscrowContractArgs, PaymentEscrowContractClient,
 };
 use soroban_sdk::token::Client as TokenClient;
 use soroban_sdk::{contractimpl, symbol_short, Address, Env};
 
-
 #[contractimpl]
 impl DeliveryInterface for PaymentEscrowContract {
-    fn buyer_confirm_delivery(env: Env, payment_id: u128, buyer: Address) -> Result<(), PaymentEscrowError> {
+    fn buyer_confirm_delivery(
+        env: Env,
+        payment_id: u128,
+        buyer: Address,
+    ) -> Result<(), PaymentEscrowError> {
         // Authentication - buyer must authorize this transaction
         buyer.require_auth();
 
@@ -30,6 +33,15 @@ impl DeliveryInterface for PaymentEscrowContract {
             return Err(PaymentEscrowError::NotDelivered);
         }
 
+        // Transfer funds to seller
+        let token_client = TokenClient::new(&env, &payment.token);
+
+        token_client.transfer(
+            &env.current_contract_address(),
+            &payment.seller,
+            &payment.amount,
+        );
+
         // Create updated payment with Completed status
         let updated_payment = Payment {
             status: PaymentStatus::Completed,
@@ -38,25 +50,28 @@ impl DeliveryInterface for PaymentEscrowContract {
 
         // Store the updated payment
         env.storage()
-            .instance()
+            .persistent()
             .set(&payment_id, &updated_payment);
 
-        
-
         // Publish event
-        env.events().publish((symbol_short!("completed"), payment_id), payment_id);
+        env.events()
+            .publish((symbol_short!("completed"), payment_id), payment_id);
 
         Ok(())
     }
 
-    fn seller_confirm_delivery(env: Env, payment_id: u128, seller: Address) -> Result<(), PaymentEscrowError> {
+    fn seller_confirm_delivery(
+        env: Env,
+        payment_id: u128,
+        seller: Address,
+    ) -> Result<(), PaymentEscrowError> {
         // Authentication - seller must authorize this transaction
         seller.require_auth();
 
         // Get the payment from storage
         let payment: Payment = env
             .storage()
-            .instance()
+            .persistent()
             .get(&payment_id)
             .ok_or(PaymentEscrowError::NotFound)?;
 
@@ -65,10 +80,6 @@ impl DeliveryInterface for PaymentEscrowContract {
             return Err(PaymentEscrowError::UnauthorizedAccess);
         }
 
-        // Check if payment status is Pending
-        if payment.status != PaymentStatus::Pending {
-            return Err(PaymentEscrowError::NotValid);
-        }
 
         // Create updated payment with Delivered status
         let updated_payment = Payment {
@@ -78,22 +89,53 @@ impl DeliveryInterface for PaymentEscrowContract {
 
         // Store the updated payment
         env.storage()
-            .instance()
+            .persistent()
             .set(&payment_id, &updated_payment);
 
-        // Transfer funds to seller
-        let token_client = TokenClient::new(&env, &updated_payment.token);
-
-        let transfer_result =
-            token_client.transfer(&env.current_contract_address(),  &updated_payment.seller,
-            &updated_payment.amount,);
-        if transfer_result != () {
-            return Err(PaymentEscrowError::TransferFailed);
-        }
-
         // Publish event
-        env.events().publish((symbol_short!("delivered"), payment_id), payment_id);
+        env.events()
+            .publish((symbol_short!("delivered"), payment_id), payment_id);
 
         Ok(())
+    }
+
+    fn get_delivery_status(
+        env: Env,
+        payment_id: u128,
+    ) -> Result<PaymentStatus, PaymentEscrowError> {
+        // Get the payment from storage
+        let payment: Payment = env
+            .storage()
+            .instance()
+            .get(&payment_id)
+            .ok_or(PaymentEscrowError::NotFound)?;
+
+        // Return the payment status
+        Ok(payment.status)
+    }
+
+    fn get_delivery_details(
+        env: Env,
+        payment_id: u128,
+    ) -> Result<DeliveryDetails, PaymentEscrowError> {
+        // Get the payment from storage
+        let payment: Payment = env
+            .storage()
+            .instance()
+            .get(&payment_id)
+            .ok_or(PaymentEscrowError::NotFound)?;
+
+        // Create and return delivery details
+        let delivery_details = DeliveryDetails {
+            payment_id,
+            buyer: payment.buyer,
+            seller: payment.seller,
+            status: payment.status,
+            created_at: payment.created_at,
+            expiry: payment.expiry,
+            description: payment.description,
+        };
+
+        Ok(delivery_details)
     }
 }

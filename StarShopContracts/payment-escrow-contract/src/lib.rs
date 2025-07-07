@@ -10,7 +10,7 @@ pub struct PaymentEscrowContract;
 impl PaymentEscrowContract {
     pub fn init(env: Env, arbitrator: Address) -> Result<(), PaymentEscrowError> {
         // Check if contract is already initialized
-        if env.storage().instance().has(&DataKey::Arbitrator) {
+        if env.storage().persistent().has(&DataKey::Arbitrator) {
             return Err(PaymentEscrowError::AlreadyInitialized);
         }
 
@@ -26,7 +26,7 @@ impl PaymentEscrowContract {
     }
 
     pub fn upgrade(e: Env, new_wasm_hash: BytesN<32>) {
-        let arbitrators: Vec<Address> = e.storage().instance().get(&DataKey::Arbitrator).unwrap();
+        let arbitrators: Vec<Address> = e.storage().persistent().get(&DataKey::Arbitrator).unwrap();
         arbitrators.iter().for_each(|a| a.require_auth());
 
         e.deployer().update_current_contract_wasm(new_wasm_hash);

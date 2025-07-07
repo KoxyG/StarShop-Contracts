@@ -1,4 +1,4 @@
-use crate::datatypes::{DisputeDecision, Payment, PaymentEscrowError};
+use crate::datatypes::{DisputeDecision, Payment, PaymentEscrowError, PaymentStatus, DeliveryDetails};
 use soroban_sdk::{Address, Env, String, Vec};
 
 pub trait PaymentInterface {
@@ -17,15 +17,15 @@ pub trait PaymentInterface {
     fn get_a_payment(env: Env, payment_id: u128) -> Result<Payment, PaymentEscrowError>;
 }
 
+
 pub trait DeliveryInterface {
- // 2. Confirm delivery - releases funds to seller
  fn buyer_confirm_delivery(env: Env, payment_id: u128, buyer: Address) -> Result<(), PaymentEscrowError>;
 
  fn seller_confirm_delivery(env: Env, payment_id: u128, seller: Address) -> Result<(), PaymentEscrowError>;
 
-//  fn get_delivery_status(env: Env, payment_id: u128) -> Result<PaymentStatus, PaymentEscrowError>;
+ fn get_delivery_status(env: Env, payment_id: u128) -> Result<PaymentStatus, PaymentEscrowError>;
 
-//  fn get_delivery_details(env: Env, payment_id: u128) -> Result<DeliveryDetails, PaymentEscrowError>;
+ fn get_delivery_details(env: Env, payment_id: u128) -> Result<DeliveryDetails, PaymentEscrowError>;
 }
 
 pub trait DisputeInterface {
@@ -40,8 +40,7 @@ pub trait ClaimInterface {
 
 
 pub trait ArbitratorInterface {
-    fn add_arbitrator(env: Env, arbitrator: Address) -> Result<(), PaymentEscrowError>;
-    fn remove_arbitrator(env: Env, arbitrator: Address) -> Result<(), PaymentEscrowError>;
+    fn add_arbitrator(env: Env, arbitrator: Address, new_arbitrator: Address) -> Result<(), PaymentEscrowError>;
     fn get_arbitrators(env: Env) -> Result<Vec<Address>, PaymentEscrowError>;
     fn transfer_arbitrator_rights(env: Env, old_arbitrator: Address, new_arbitrator: Address) -> Result<(), PaymentEscrowError>;
 }

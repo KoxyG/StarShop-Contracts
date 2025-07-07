@@ -22,7 +22,7 @@ impl DisputeInterface for PaymentEscrowContract {
             .ok_or(PaymentEscrowError::NotFound)?;
 
         // Check if the disputer is either the buyer or seller
-        if payment.buyer != disputer && payment.seller != disputer {
+        if payment.buyer != disputer || payment.seller != disputer {
             return Err(PaymentEscrowError::UnauthorizedAccess);
         }
 
@@ -63,7 +63,7 @@ impl DisputeInterface for PaymentEscrowContract {
         // Store dispute event
         env.storage()
             .persistent()
-            .set(&DataKey::DisputedPayments, &dispute_event);
+            .set(&(DataKey::DisputedPayments, payment_id), &dispute_event);
 
         // Publish event
         env.events().publish((symbol_short!("disputed"), payment_id), payment_id);
@@ -110,11 +110,14 @@ impl DisputeInterface for PaymentEscrowContract {
         match decision {
             DisputeDecision::PaySeller => {
                 // Transfer funds to seller
-                token_client.transfer(
+                let transfer_result = token_client.transfer(
                     &env.current_contract_address(),
                     &payment.seller,
                     &payment.amount,
                 );
+                if transfer_result != () {
+                    return Err(PaymentEscrowError::TransferFailed);
+                }
 
                 // Update payment status to Completed
                 let updated_payment = Payment {
@@ -127,11 +130,14 @@ impl DisputeInterface for PaymentEscrowContract {
             },
             DisputeDecision::RefundBuyer => {
                 // Transfer funds back to buyer
-                token_client.transfer(
+                let transfer_result = token_client.transfer(
                     &env.current_contract_address(),
                     &payment.buyer,
                     &payment.amount,
                 );
+                if transfer_result != () {
+                    return Err(PaymentEscrowError::TransferFailed);
+                }
 
                 // Update payment status to Refunded
                 let updated_payment = Payment {
@@ -154,7 +160,7 @@ impl DisputeInterface for PaymentEscrowContract {
         // Store dispute resolved event
         env.storage()
             .persistent()
-            .set(&DataKey::DisputedPayments, &dispute_resolved_event);
+            .set(&(DataKey::ResolvedDisputes, payment_id), &dispute_resolved_event);
 
         // Publish event
         env.events().publish((symbol_short!("resolved"), payment_id), payment_id);
