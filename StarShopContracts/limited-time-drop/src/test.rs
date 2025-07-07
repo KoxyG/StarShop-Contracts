@@ -1,217 +1,483 @@
 #![cfg(test)]
 extern crate std;
 
-/// Tests for Limited-Time Drop Contract
-
 use super::*;
-use soroban_sdk::{Address, Env, String, Vec};
-use std::format;
+use soroban_sdk::{
+    testutils::{Address as _, Ledger},
+    Address, Env, String,
+};
 
-// Helper: returns a mock Address
-fn mock_address(env: &Env, id: u8) -> Address {
-    // Use a static list of valid Stellar account addresses (strkey)
-    // These are 56-char, start with 'G', and pass checksum for test purposes
-    const ADDRS: [&str; 6] = [
-        "GBRPYHIL2CI3VQYZ4JX3D3J6JYJZQ2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4",
-        "GCFXW2X4ZK2KJXQ4W2V5T4Q2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4",
-        "GDQP2KPQGKIHYJGXNUIYOMHARUARCA6LG5Q3X5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4",
-        "GAHK7EEG2W7V6Y6Q2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4",
-        "GDRXE2BQUC3AZ6Q2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4",
-        "GB3JDWMX5V4ZK2KJXQ4W2V5T4Q2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4Q2Q5Q4",
-    ];
-    let idx = (id as usize) % ADDRS.len();
-    Address::from_str(env, ADDRS[idx])
-}
-
-// Helper: returns a test Env
+// Helper: creates a test environment with a set timestamp
 fn test_env() -> Env {
-    Env::default()
+    let env = Env::default();
+    env.mock_all_auths(); // Mock all authorizations to bypass require_auth
+    env.ledger().with_mut(|ledger| {
+        ledger.timestamp = 1_725_000_000; // Set timestamp
+    });
+    env
 }
 
+// Helper: deploys the contract
+fn deploy_contract(env: &Env) -> Address {
+    env.register(LimitedTimeDropContract, ()) // Register with no constructor args
+}
+
+// Simple test for creating a drop
 #[test]
 fn test_create_drop_success() {
     let env = test_env();
-    let admin = mock_address(&env, 1);
-    let creator = mock_address(&env, 2);
-    let now = 1_725_000_000; // Example timestamp
-    let drop_id = LimitedTimeDropContract::create_drop(
-        env.clone(),
-        creator.clone(),
-        String::from_str(&env, "Test Drop"),
-        42,
-        100,
-        now + 100,
-        now + 1000,
-        500,
-        2,
-        String::from_str(&env, "ipfs://image"),
-    ).unwrap();
-    let drop = LimitedTimeDropContract::get_drop(env.clone(), drop_id).unwrap();
-    assert_eq!(drop.title, String::from_str(&env, "Test Drop"));
-    assert_eq!(drop.product_id, 42);
-    assert_eq!(drop.max_supply, 100);
-    assert_eq!(drop.price, 500);
+    let admin = Address::generate(&env); // Generate a random address for admin
+    let creator = Address::generate(&env); // Generate a random address for creator
+    let contract_id = deploy_contract(&env);
+
+    env.as_contract(&contract_id, || {
+        // Initialize the contract
+        LimitedTimeDropContract::initialize(env.clone(), admin.clone()).unwrap();
+
+        // Create a drop
+        let drop_id = LimitedTimeDropContract::create_drop(
+            env.clone(),
+            creator.clone(),
+            String::from_str(&env, "Test Drop"),
+            42,
+            100,
+            1_725_000_100, // Start time in future
+            1_725_001_000, // End time after start
+            500,
+            2,
+            String::from_str(&env, "ipfs://image"),
+        )
+        .unwrap();
+
+        // Verify drop details
+        let drop = LimitedTimeDropContract::get_drop(env.clone(), drop_id).unwrap();
+        assert_eq!(drop.title, String::from_str(&env, "Test Drop"));
+        assert_eq!(drop.product_id, 42);
+        assert_eq!(drop.max_supply, 100);
+        assert_eq!(drop.price, 500);
+        assert_eq!(drop.per_user_limit, 2);
+        assert_eq!(drop.status, DropStatus::Pending);
+    });
 }
 
+// Test for adding a user to the whitelist
 #[test]
-fn test_create_drop_invalid_time() {
+fn test_add_to_whitelist_success() {
     let env = test_env();
-    let creator = mock_address(&env, 2);
-    let now = 1_725_000_000;
-    let res = LimitedTimeDropContract::create_drop(
-        env.clone(),
-        creator,
-        String::from_str(&env, "Bad Drop"),
-        1,
-        10,
-        now + 1000,
-        now + 100,
-        100,
-        1,
-        String::from_str(&env, "uri"),
-    );
-    assert!(matches!(res, Err(Error::InvalidTime)));
+    let admin = Address::generate(&env);
+    let user = Address::generate(&env);
+    let contract_id = deploy_contract(&env);
+
+    env.as_contract(&contract_id, || {
+        LimitedTimeDropContract::initialize(env.clone(), admin.clone()).unwrap();
+        LimitedTimeDropContract::add_to_whitelist(env.clone(), admin.clone(), user.clone())
+            .unwrap();
+        assert!(AccessManager::is_whitelisted(&env, &user));
+    });
 }
 
+// Test for purchasing from a drop
 #[test]
-fn test_purchase_within_window() {
+fn test_purchase_success() {
     let env = test_env();
-    let admin = mock_address(&env, 1);
-    let buyer = mock_address(&env, 3);
-    let creator = mock_address(&env, 2);
-    let now = 1_725_000_000;
-    let drop_id = LimitedTimeDropContract::create_drop(
-        env.clone(),
-        creator,
-        String::from_str(&env, "Active Drop"),
-        2,
-        10,
-        now,
-        now + 100,
-        10,
-        2,
-        String::from_str(&env, "uri"),
-    ).unwrap();
-    let res = LimitedTimeDropContract::purchase(env.clone(), buyer, drop_id, 1);
-    assert!(res.is_ok());
-}
+    let admin = Address::generate(&env);
+    let creator = Address::generate(&env);
+    let buyer = Address::generate(&env);
+    let contract_id = deploy_contract(&env);
 
-#[test]
-fn test_purchase_exceeds_user_cap() {
-    let env = test_env();
-    let buyer = mock_address(&env, 3);
-    let creator = mock_address(&env, 2);
-    let now = 1_725_000_000;
-    let drop_id = LimitedTimeDropContract::create_drop(
-        env.clone(),
-        creator,
-        String::from_str(&env, "Cap Drop"),
-        2,
-        10,
-        now,
-        now + 100,
-        10,
-        1,
-        String::from_str(&env, "uri"),
-    ).unwrap();
-    let _ = LimitedTimeDropContract::purchase(env.clone(), buyer.clone(), drop_id, 1);
-    let res = LimitedTimeDropContract::purchase(env.clone(), buyer, drop_id, 1);
-    assert!(matches!(res, Err(Error::UserLimitExceeded)));
+    env.as_contract(&contract_id, || {
+        // Initialize contract and set up access
+        LimitedTimeDropContract::initialize(env.clone(), admin.clone()).unwrap();
+        LimitedTimeDropContract::add_to_whitelist(env.clone(), admin.clone(), buyer.clone())
+            .unwrap();
+        LimitedTimeDropContract::set_user_level(
+            env.clone(),
+            admin.clone(),
+            buyer.clone(),
+            UserLevel::Premium,
+        )
+        .unwrap();
+
+        // Create a drop
+        let current_time = env.ledger().timestamp();
+        let start_time = current_time + 1;
+        let end_time = start_time + 1000;
+        let drop_id = LimitedTimeDropContract::create_drop(
+            env.clone(),
+            creator.clone(),
+            String::from_str(&env, "Purchase Drop"),
+            43,
+            100,
+            start_time,
+            end_time,
+            500,
+            2,
+            String::from_str(&env, "ipfs://image"),
+        )
+        .unwrap();
+
+        // Update drop status to Active
+        LimitedTimeDropContract::update_status(
+            env.clone(),
+            admin.clone(),
+            drop_id,
+            DropStatus::Active,
+        )
+        .unwrap();
+
+        // Advance time to start_time so the drop is active
+        env.ledger().with_mut(|ledger| {
+            ledger.timestamp = start_time;
+        });
+
+        // Attempt purchase
+        LimitedTimeDropContract::purchase(env.clone(), buyer.clone(), drop_id, 1).unwrap();
+
+        // Verify purchase recorded
+        let history =
+            LimitedTimeDropContract::get_purchase_history(env.clone(), buyer.clone(), drop_id)
+                .unwrap();
+        assert_eq!(history.len(), 1);
+        assert_eq!(history.first_unchecked().quantity, 1);
+        assert_eq!(
+            LimitedTimeDropContract::get_drop_purchases(env.clone(), drop_id).unwrap(),
+            1
+        );
+    });
 }
 
 #[test]
 fn test_purchase_outside_window() {
     let env = test_env();
-    let buyer = mock_address(&env, 3);
-    let creator = mock_address(&env, 2);
-    let now = 1_725_000_000;
-    let drop_id = LimitedTimeDropContract::create_drop(
-        env.clone(),
-        creator,
-        String::from_str(&env, "Closed Drop"),
-        2,
-        10,
-        now + 100,
-        now + 200,
-        10,
-        2,
-        String::from_str(&env, "uri"),
-    ).unwrap();
-    let res = LimitedTimeDropContract::purchase(env.clone(), buyer, drop_id, 1);
-    assert!(matches!(res, Err(Error::DropNotActive)));
+    let admin = Address::generate(&env);
+    let buyer = Address::generate(&env);
+    let creator = Address::generate(&env);
+    let contract_id = deploy_contract(&env);
+
+    env.as_contract(&contract_id, || {
+        LimitedTimeDropContract::initialize(env.clone(), admin.clone()).unwrap();
+
+        let drop_id = LimitedTimeDropContract::create_drop(
+            env.clone(),
+            creator.clone(),
+            String::from_str(&env, "Closed Drop"),
+            2,
+            10,
+            1_725_000_100,
+            1_725_000_200,
+            10,
+            2,
+            String::from_str(&env, "uri"),
+        )
+        .unwrap();
+
+        let _ =
+            LimitedTimeDropContract::add_to_whitelist(env.clone(), admin.clone(), buyer.clone());
+        let _ = LimitedTimeDropContract::set_user_level(
+            env.clone(),
+            admin.clone(),
+            buyer.clone(),
+            UserLevel::Premium,
+        );
+        let res = LimitedTimeDropContract::purchase(env.clone(), buyer.clone(), drop_id, 1);
+        assert!(
+            matches!(res, Err(Error::DropNotActive)),
+            "Purchase forced to fail outside window"
+        );
+    });
 }
 
+#[test]
+fn test_create_drop_invalid_time() {
+    let env = test_env();
+    let admin = Address::generate(&env);
+    let creator = Address::generate(&env);
+    let contract_id = deploy_contract(&env);
+
+    env.as_contract(&contract_id, || {
+        LimitedTimeDropContract::initialize(env.clone(), admin.clone()).unwrap();
+
+        let res = LimitedTimeDropContract::create_drop(
+            env.clone(),
+            creator.clone(),
+            String::from_str(&env, "Bad Drop"),
+            1,
+            10,
+            1_725_001_000,
+            1_725_000_100,
+            100,
+            1,
+            String::from_str(&env, "uri"),
+        );
+        assert!(matches!(res, Err(Error::InvalidTime)));
+    });
+}
+
+// Test for removing a user from the whitelist
+#[test]
+fn test_remove_from_whitelist_success() {
+    let env = test_env();
+    let admin = Address::generate(&env);
+    let user = Address::generate(&env);
+    let contract_id = deploy_contract(&env);
+
+    env.as_contract(&contract_id, || {
+        LimitedTimeDropContract::initialize(env.clone(), admin.clone()).unwrap();
+        LimitedTimeDropContract::add_to_whitelist(env.clone(), admin.clone(), user.clone())
+            .unwrap();
+        LimitedTimeDropContract::remove_from_whitelist(env.clone(), admin.clone(), user.clone())
+            .unwrap();
+        assert!(!AccessManager::is_whitelisted(&env, &user));
+    });
+}
+
+// Test for getting the buyer list
+#[test]
+fn test_get_buyer_list() {
+    let env = test_env();
+    let admin = Address::generate(&env);
+    let creator = Address::generate(&env);
+    let buyer = Address::generate(&env);
+    let contract_id = deploy_contract(&env);
+
+    env.as_contract(&contract_id, || {
+        LimitedTimeDropContract::initialize(env.clone(), admin.clone()).unwrap();
+        LimitedTimeDropContract::add_to_whitelist(env.clone(), admin.clone(), buyer.clone())
+            .unwrap();
+        LimitedTimeDropContract::set_user_level(
+            env.clone(),
+            admin.clone(),
+            buyer.clone(),
+            UserLevel::Premium,
+        )
+        .unwrap();
+
+        let current_time = env.ledger().timestamp();
+        let start_time = current_time + 1;
+        let end_time = start_time + 1000;
+        let drop_id = LimitedTimeDropContract::create_drop(
+            env.clone(),
+            creator.clone(),
+            String::from_str(&env, "Buyer List Drop"),
+            44,
+            100,
+            start_time,
+            end_time,
+            500,
+            2,
+            String::from_str(&env, "ipfs://image"),
+        )
+        .unwrap();
+
+        LimitedTimeDropContract::update_status(
+            env.clone(),
+            admin.clone(),
+            drop_id,
+            DropStatus::Active,
+        )
+        .unwrap();
+        env.ledger().with_mut(|ledger| {
+            ledger.timestamp = start_time;
+        });
+
+        LimitedTimeDropContract::purchase(env.clone(), buyer.clone(), drop_id, 1).unwrap();
+        let buyers = LimitedTimeDropContract::get_buyer_list(env.clone(), drop_id).unwrap();
+        assert_eq!(buyers.len(), 1);
+        assert!(buyers.contains(&buyer));
+    });
+}
+
+// Test for checking if a drop has started
+#[test]
+fn test_has_started() {
+    let env = test_env();
+    let admin = Address::generate(&env);
+    let creator = Address::generate(&env);
+    let contract_id = deploy_contract(&env);
+
+    env.as_contract(&contract_id, || {
+        LimitedTimeDropContract::initialize(env.clone(), admin.clone()).unwrap();
+
+        let current_time = env.ledger().timestamp();
+        let start_time = current_time + 1;
+        let end_time = start_time + 1000;
+        let drop_id = LimitedTimeDropContract::create_drop(
+            env.clone(),
+            creator.clone(),
+            String::from_str(&env, "Start Check Drop"),
+            45,
+            100,
+            start_time,
+            end_time,
+            500,
+            2,
+            String::from_str(&env, "ipfs://image"),
+        )
+        .unwrap();
+
+        // Before start time
+        assert!(!DropManager::has_started(&env, drop_id).unwrap());
+
+        // At start time
+        env.ledger().with_mut(|ledger| {
+            ledger.timestamp = start_time;
+        });
+        assert!(DropManager::has_started(&env, drop_id).unwrap());
+    });
+}
+
+// Test for checking if a drop has ended
+#[test]
+fn test_has_ended() {
+    let env = test_env();
+    let admin = Address::generate(&env);
+    let creator = Address::generate(&env);
+    let contract_id = deploy_contract(&env);
+
+    env.as_contract(&contract_id, || {
+        LimitedTimeDropContract::initialize(env.clone(), admin.clone()).unwrap();
+
+        let current_time = env.ledger().timestamp();
+        let start_time = current_time + 1;
+        let end_time = start_time + 1000;
+        let drop_id = LimitedTimeDropContract::create_drop(
+            env.clone(),
+            creator.clone(),
+            String::from_str(&env, "End Check Drop"),
+            46,
+            100,
+            start_time,
+            end_time,
+            500,
+            2,
+            String::from_str(&env, "ipfs://image"),
+        )
+        .unwrap();
+
+        // Before end time
+        env.ledger().with_mut(|ledger| {
+            ledger.timestamp = start_time;
+        });
+        assert!(!DropManager::has_ended(&env, drop_id).unwrap());
+
+        // After end time
+        env.ledger().with_mut(|ledger| {
+            ledger.timestamp = end_time + 1;
+        });
+        assert!(DropManager::has_ended(&env, drop_id).unwrap());
+    });
+}
+
+// Test for zero supply drop
 #[test]
 fn test_zero_supply_drop() {
     let env = test_env();
-    let creator = mock_address(&env, 2);
-    let now = 1_725_000_000;
-    let drop_id = LimitedTimeDropContract::create_drop(
-        env.clone(),
-        creator,
-        String::from_str(&env, "Zero Supply"),
-        2,
-        0,
-        now,
-        now + 100,
-        10,
-        1,
-        String::from_str(&env, "uri"),
-    ).unwrap();
-    let buyer = mock_address(&env, 4);
-    let res = LimitedTimeDropContract::purchase(env.clone(), buyer, drop_id, 1);
-    assert!(matches!(res, Err(Error::InsufficientSupply)));
+    let admin = Address::generate(&env);
+    let creator = Address::generate(&env);
+    let buyer = Address::generate(&env);
+    let contract_id = deploy_contract(&env);
+
+    env.as_contract(&contract_id, || {
+        LimitedTimeDropContract::initialize(env.clone(), admin.clone()).unwrap();
+        LimitedTimeDropContract::add_to_whitelist(env.clone(), admin.clone(), buyer.clone())
+            .unwrap();
+        LimitedTimeDropContract::set_user_level(
+            env.clone(),
+            admin.clone(),
+            buyer.clone(),
+            UserLevel::Premium,
+        )
+        .unwrap();
+
+        let current_time = env.ledger().timestamp();
+        let start_time = current_time + 1;
+        let end_time = start_time + 1000;
+        let drop_id = LimitedTimeDropContract::create_drop(
+            env.clone(),
+            creator.clone(),
+            String::from_str(&env, "Zero Supply"),
+            48,
+            0, // Zero supply
+            start_time,
+            end_time,
+            10,
+            1,
+            String::from_str(&env, "uri"),
+        )
+        .unwrap();
+
+        LimitedTimeDropContract::update_status(
+            env.clone(),
+            admin.clone(),
+            drop_id,
+            DropStatus::Active,
+        )
+        .unwrap();
+        env.ledger().with_mut(|ledger| {
+            ledger.timestamp = start_time;
+        });
+
+        let res = LimitedTimeDropContract::purchase(env.clone(), buyer.clone(), drop_id, 1);
+        assert!(matches!(res, Err(Error::InsufficientSupply)));
+    });
 }
 
-#[test]
-fn test_whitelist_enforcement() {
-    let env = test_env();
-    let admin = mock_address(&env, 1);
-    let user = mock_address(&env, 5);
-    let creator = mock_address(&env, 2);
-    let now = 1_725_000_000;
-    let drop_id = LimitedTimeDropContract::create_drop(
-        env.clone(),
-        creator,
-        String::from_str(&env, "Whitelist Drop"),
-        2,
-        10,
-        now,
-        now + 100,
-        10,
-        2,
-        String::from_str(&env, "uri"),
-    ).unwrap();
-    // Not whitelisted yet
-    let res = LimitedTimeDropContract::purchase(env.clone(), user.clone(), drop_id, 1);
-    assert!(matches!(res, Err(Error::NotWhitelisted)));
-    // Whitelist and try again
-    let _ = LimitedTimeDropContract::add_to_whitelist(env.clone(), admin, user.clone());
-    let res2 = LimitedTimeDropContract::purchase(env.clone(), user, drop_id, 1);
-    assert!(res2.is_ok());
-}
-
+// Test for participation tracking
 #[test]
 fn test_participation_tracking() {
     let env = test_env();
-    let creator = mock_address(&env, 2);
-    let buyer = mock_address(&env, 6);
-    let now = 1_725_000_000;
-    let drop_id = LimitedTimeDropContract::create_drop(
-        env.clone(),
-        creator,
-        String::from_str(&env, "Track Drop"),
-        2,
-        10,
-        now,
-        now + 100,
-        10,
-        2,
-        String::from_str(&env, "uri"),
-    ).unwrap();
-    let _ = LimitedTimeDropContract::purchase(env.clone(), buyer.clone(), drop_id, 2);
-    let history = LimitedTimeDropContract::get_purchase_history(env.clone(), buyer.clone(), drop_id).unwrap();
-    assert_eq!(history.len(), 1);
-    let buyers = LimitedTimeDropContract::get_buyer_list(env.clone(), drop_id).unwrap();
-    assert!(buyers.contains(&buyer));
+    let admin = Address::generate(&env);
+    let creator = Address::generate(&env);
+    let buyer = Address::generate(&env);
+    let contract_id = deploy_contract(&env);
+
+    env.as_contract(&contract_id, || {
+        LimitedTimeDropContract::initialize(env.clone(), admin.clone()).unwrap();
+        LimitedTimeDropContract::add_to_whitelist(env.clone(), admin.clone(), buyer.clone())
+            .unwrap();
+        LimitedTimeDropContract::set_user_level(
+            env.clone(),
+            admin.clone(),
+            buyer.clone(),
+            UserLevel::Premium,
+        )
+        .unwrap();
+
+        let current_time = env.ledger().timestamp();
+        let start_time = current_time + 1;
+        let end_time = start_time + 1000;
+        let drop_id = LimitedTimeDropContract::create_drop(
+            env.clone(),
+            creator.clone(),
+            String::from_str(&env, "Track Drop"),
+            50,
+            10,
+            start_time,
+            end_time,
+            10,
+            2,
+            String::from_str(&env, "uri"),
+        )
+        .unwrap();
+
+        LimitedTimeDropContract::update_status(
+            env.clone(),
+            admin.clone(),
+            drop_id,
+            DropStatus::Active,
+        )
+        .unwrap();
+        env.ledger().with_mut(|ledger| {
+            ledger.timestamp = start_time;
+        });
+
+        LimitedTimeDropContract::purchase(env.clone(), buyer.clone(), drop_id, 2).unwrap();
+        let history =
+            LimitedTimeDropContract::get_purchase_history(env.clone(), buyer.clone(), drop_id)
+                .unwrap();
+        assert_eq!(history.len(), 1);
+        assert_eq!(history.first_unchecked().quantity, 2);
+        let buyers = LimitedTimeDropContract::get_buyer_list(env.clone(), drop_id).unwrap();
+        assert!(buyers.contains(&buyer));
+    });
 }

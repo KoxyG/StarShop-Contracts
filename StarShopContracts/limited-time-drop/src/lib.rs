@@ -101,9 +101,29 @@ impl LimitedTimeDropContract {
         AccessManager::add_to_whitelist(&env, &admin, &user)
     }
 
+    /// Remove a user from the whitelist (Admin only)
+    pub fn remove_from_whitelist(env: Env, admin: Address, user: Address) -> Result<(), Error> {
+        AccessManager::remove_from_whitelist(&env, &admin, &user)
+    }
+
     /// Set a user's access level (Admin only)
-    pub fn set_user_level(env: Env, admin: Address, user: Address, level: UserLevel) -> Result<(), Error> {
+    pub fn set_user_level(
+        env: Env,
+        admin: Address,
+        user: Address,
+        level: UserLevel,
+    ) -> Result<(), Error> {
         AccessManager::set_user_level(&env, &admin, &user, level)
+    }
+
+    /// Update the status of a drop (Admin only)
+    pub fn update_status(
+        env: Env,
+        admin: Address,
+        drop_id: u32,
+        status: DropStatus,
+    ) -> Result<(), Error> {
+        DropManager::update_status(&env, &admin, drop_id, status)
     }
 }
 

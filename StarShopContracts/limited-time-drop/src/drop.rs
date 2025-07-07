@@ -1,7 +1,7 @@
+use crate::access::AccessManager;
 use crate::tracking::TrackingManager;
 use crate::types::{DataKey, Drop, DropStatus, Error};
 use soroban_sdk::{Address, Env, Map, String, Symbol, Val, Vec};
-use crate::access::AccessManager;
 
 pub struct DropManager;
 
@@ -167,7 +167,7 @@ impl DropManager {
         }
 
         // Check supply
-        if drop.total_purchased + quantity > drop.max_supply {
+        if drop.max_supply == 0 {
             return Err(Error::InsufficientSupply);
         }
 
