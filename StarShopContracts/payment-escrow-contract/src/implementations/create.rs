@@ -45,7 +45,13 @@ impl PaymentInterface for PaymentEscrowContract {
         let current_ledger = env.ledger().timestamp();
         let expiry_days = if expiry_days == 0 { 30 } else { expiry_days }; // Default to 30 days if not specified
         let expiry_timestamp = current_ledger + (expiry_days as u64 * 24 * 60 * 60); // Convert days to seconds
-        let dispute_deadline = expiry_timestamp - (7 * 24 * 60 * 60); // 7 days before expiry
+        
+        // Calculate dispute deadline (7 days before expiry, but not before current time)
+        let dispute_deadline = if expiry_days >= 7 {
+            expiry_timestamp - (7 * 24 * 60 * 60) // 7 days before expiry
+        } else {
+            expiry_timestamp // Dispute deadline is current time for short payments
+        };
 
         // 4. create token client
         let token_client = TokenClient::new(&env, &token);

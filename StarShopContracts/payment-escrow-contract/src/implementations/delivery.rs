@@ -19,7 +19,7 @@ impl DeliveryInterface for PaymentEscrowContract {
         // Get the payment from storage
         let payment: Payment = env
             .storage()
-            .instance()
+            .persistent()
             .get(&payment_id)
             .ok_or(PaymentEscrowError::NotFound)?;
 
@@ -32,6 +32,12 @@ impl DeliveryInterface for PaymentEscrowContract {
         if payment.status != PaymentStatus::Delivered {
             return Err(PaymentEscrowError::NotDelivered);
         }
+
+         // Can't confirm a payment that is disputed
+         if payment.status == PaymentStatus::Disputed {
+            return Err(PaymentEscrowError::PaymentDisputed);
+        }
+
 
         // Transfer funds to seller
         let token_client = TokenClient::new(&env, &payment.token);
@@ -78,6 +84,11 @@ impl DeliveryInterface for PaymentEscrowContract {
         // Check if payment is in correct status
         if payment.status != PaymentStatus::Pending {
             return Err(PaymentEscrowError::NotValid);
+        }
+
+        // Can't confirm a payment that is disputed
+        if payment.status == PaymentStatus::Disputed {
+            return Err(PaymentEscrowError::PaymentDisputed);
         }
 
         // Create updated payment with Delivered status

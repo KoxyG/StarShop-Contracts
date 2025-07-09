@@ -22,7 +22,7 @@ impl DisputeInterface for PaymentEscrowContract {
             .ok_or(PaymentEscrowError::NotFound)?;
 
         // Check if the disputer is either the buyer or seller
-        if payment.buyer != disputer || payment.seller != disputer {
+        if payment.buyer != disputer && payment.seller != disputer {
             return Err(PaymentEscrowError::UnauthorizedAccess);
         }
 

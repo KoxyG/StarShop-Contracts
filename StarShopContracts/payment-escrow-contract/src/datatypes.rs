@@ -40,6 +40,7 @@ pub enum PaymentEscrowError {
     NotExpired = 16,
     NotSeller = 17,
     ArbitratorAlreadyExists = 18,
+    PaymentDisputed = 19,
 }
 
 // Status Enum

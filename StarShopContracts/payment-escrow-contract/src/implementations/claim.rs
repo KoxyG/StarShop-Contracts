@@ -21,8 +21,14 @@ impl ClaimInterface for PaymentEscrowContract {
             .ok_or(PaymentEscrowError::NotFound)?;
 
         // Check if the payment is expired
-        if payment.status != PaymentStatus::Expired {
+        let current_timestamp = env.ledger().timestamp();
+        if current_timestamp <= payment.expiry {
             return Err(PaymentEscrowError::NotExpired);
+        }
+
+        // Can't claim a payment that is disputed
+        if payment.status == PaymentStatus::Disputed {
+            return Err(PaymentEscrowError::PaymentDisputed);
         }
 
         // Check if the caller is the buyer (buyer can claim expired payments)
