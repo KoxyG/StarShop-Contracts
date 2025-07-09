@@ -2,15 +2,18 @@
 extern crate std;
 
 use crate::{
-    PaymentEscrowContract, PaymentEscrowContractClient, datatypes::{PaymentStatus, DisputeDecision}
+    datatypes::{DisputeDecision, PaymentStatus},
+    PaymentEscrowContract, PaymentEscrowContractClient,
 };
-use soroban_sdk::{testutils::Ledger, token::{StellarAssetClient as TokenAdmin, TokenClient}};
 use soroban_sdk::{
     symbol_short,
     testutils::{Address as _, AuthorizedFunction, AuthorizedInvocation},
-    Address, Env, IntoVal, Symbol, String,
+    Address, Env, IntoVal, String, Symbol,
 };
-
+use soroban_sdk::{
+    testutils::Ledger,
+    token::{StellarAssetClient as TokenAdmin, TokenClient},
+};
 
 #[test]
 fn test_process_deposit_with_auth() {
@@ -41,7 +44,14 @@ fn test_process_deposit_with_auth() {
     token.mint(&buyer, &1000);
 
     // Execute transaction
-    client.create_payment(&buyer, &seller, &amount, &token_contract_id, &expiry_days, &description);
+    client.create_payment(
+        &buyer,
+        &seller,
+        &amount,
+        &token_contract_id,
+        &expiry_days,
+        &description,
+    );
 
     // Verify signed transactions
     assert_eq!(
@@ -78,7 +88,6 @@ fn test_process_deposit_with_auth() {
     let token_client = TokenClient::new(&env, &token_contract_id);
     assert_eq!(token_client.balance(&buyer), 900);
     assert_eq!(token_client.balance(&contract_id), 100);
-
 }
 
 #[test]
@@ -109,7 +118,14 @@ fn test_get_payment() {
     token.mint(&buyer, &1000);
 
     // Create a payment
-    let payment_id = client.create_payment(&buyer, &seller, &amount, &token_contract_id, &expiry_days, &description);
+    let payment_id = client.create_payment(
+        &buyer,
+        &seller,
+        &amount,
+        &token_contract_id,
+        &expiry_days,
+        &description,
+    );
 
     // Get the payment using get_a_payment
     let retrieved_payment = client.get_a_payment(&payment_id);
@@ -152,7 +168,14 @@ fn test_confirm_deliveries() {
     token.mint(&buyer, &1000);
 
     // Create a payment
-    let payment_id = client.create_payment(&buyer, &seller, &amount, &token_contract_id, &expiry_days, &description);
+    let payment_id = client.create_payment(
+        &buyer,
+        &seller,
+        &amount,
+        &token_contract_id,
+        &expiry_days,
+        &description,
+    );
 
     // Seller confirms delivery first (changes status to Delivered)
     client.seller_confirm_delivery(&payment_id, &seller);
@@ -198,7 +221,14 @@ fn test_get_delivery_status() {
     token.mint(&buyer, &1000);
 
     // Create a payment
-    let payment_id = client.create_payment(&buyer, &seller, &amount, &token_contract_id, &expiry_days, &description);
+    let payment_id = client.create_payment(
+        &buyer,
+        &seller,
+        &amount,
+        &token_contract_id,
+        &expiry_days,
+        &description,
+    );
 
     // Check initial status (should be Pending)
     let initial_status = client.get_delivery_status(&payment_id);
@@ -247,7 +277,14 @@ fn test_get_delivery_details() {
     token.mint(&buyer, &1000);
 
     // Create a payment
-    let payment_id = client.create_payment(&buyer, &seller, &amount, &token_contract_id, &expiry_days, &description);
+    let payment_id = client.create_payment(
+        &buyer,
+        &seller,
+        &amount,
+        &token_contract_id,
+        &expiry_days,
+        &description,
+    );
 
     // Get delivery details
     let delivery_details = client.get_delivery_details(&payment_id);
@@ -288,7 +325,14 @@ fn test_dispute_payment() {
     token.mint(&buyer, &1000);
 
     // Create a payment
-    let payment_id = client.create_payment(&buyer, &seller, &amount, &token_contract_id, &expiry_days, &description);
+    let payment_id = client.create_payment(
+        &buyer,
+        &seller,
+        &amount,
+        &token_contract_id,
+        &expiry_days,
+        &description,
+    );
 
     // Buyer disputes the payment
     let dispute_reason = String::from_str(&env, "Item not received as described");
@@ -333,7 +377,14 @@ fn test_resolve_dispute() {
     token.mint(&buyer, &1000);
 
     // Create a payment
-    let payment_id = client.create_payment(&buyer, &seller, &amount, &token_contract_id, &expiry_days, &description);
+    let payment_id = client.create_payment(
+        &buyer,
+        &seller,
+        &amount,
+        &token_contract_id,
+        &expiry_days,
+        &description,
+    );
 
     // Buyer disputes the payment
     let dispute_reason = String::from_str(&env, "Item not received as described");
@@ -341,7 +392,12 @@ fn test_resolve_dispute() {
 
     // Arbitrator resolves dispute in favor of seller
     let resolution_reason = String::from_str(&env, "Evidence shows item was delivered correctly");
-    client.resolve_dispute(&payment_id, &arbitrator, &DisputeDecision::PaySeller, &resolution_reason);
+    client.resolve_dispute(
+        &payment_id,
+        &arbitrator,
+        &DisputeDecision::PaySeller,
+        &resolution_reason,
+    );
 
     // Verify the payment status is now Completed
     let payment = client.get_a_payment(&payment_id);
@@ -379,8 +435,15 @@ fn test_claim_expired_payment() {
     // Mint tokens to buyer
     token.mint(&buyer, &1000);
 
-    // Create a payment with a very short expiry (1 second)
-    let payment_id = client.create_payment(&buyer, &seller, &amount, &token_contract_id, &1, &description);
+    // Create a payment with 1 day expiry
+    let payment_id = client.create_payment(
+        &buyer,
+        &seller,
+        &amount,
+        &token_contract_id,
+        &1,
+        &description,
+    );
 
     // Verify the payment was created successfully
     let payment = client.get_a_payment(&payment_id);
@@ -392,9 +455,21 @@ fn test_claim_expired_payment() {
     assert_eq!(token_client.balance(&contract_id), 100);
     assert_eq!(token_client.balance(&seller), 0);
 
-    // Note: The claim function is tested in the implementation
-    // In a real scenario, the payment would need to expire before claiming
-    // The claim functionality is verified by the error handling in the implementation
+    // Advance time to make the payment expire
+    let current_time = env.ledger().timestamp();
+    let future_time = current_time + 2 * 24 * 60 * 60; // 2 days in the future
+    env.ledger().set_timestamp(future_time);
+
+    // Now claim the expired payment
+    client.claim_payment(&payment_id, &buyer);
+
+    // Verify the payment status is now Refunded
+    let updated_payment = client.get_a_payment(&payment_id);
+    assert_eq!(updated_payment.status, PaymentStatus::Refunded);
+
+    // Verify buyer received the funds back
+    assert_eq!(token_client.balance(&buyer), 1000);
+    assert_eq!(token_client.balance(&contract_id), 0);
 }
 
 #[test]
@@ -424,7 +499,14 @@ fn test_claim_with_time_expiration() {
     token.mint(&buyer, &1000);
 
     // Create a payment with 1-day expiry
-    let payment_id = client.create_payment(&buyer, &seller, &amount, &token_contract_id, &1, &description);
+    let payment_id = client.create_payment(
+        &buyer,
+        &seller,
+        &amount,
+        &token_contract_id,
+        &1,
+        &description,
+    );
 
     // Verify initial status
     let payment = client.get_a_payment(&payment_id);
@@ -434,7 +516,7 @@ fn test_claim_with_time_expiration() {
     // We need to advance more than 1 day (86400 seconds) to make the payment expire
     let current_time = env.ledger().timestamp();
     let future_time = current_time + 2 * 24 * 60 * 60; // 2 days in the future
-    
+
     // Use the test environment's time manipulation
     env.ledger().set_timestamp(future_time);
 
@@ -480,7 +562,14 @@ fn test_claim_before_expiry_should_fail() {
     token.mint(&buyer, &1000);
 
     // Create a payment with 30-day expiry
-    let payment_id = client.create_payment(&buyer, &seller, &amount, &token_contract_id, &30, &description);
+    let payment_id = client.create_payment(
+        &buyer,
+        &seller,
+        &amount,
+        &token_contract_id,
+        &30,
+        &description,
+    );
 
     // Verify initial status
     let payment = client.get_a_payment(&payment_id);
@@ -488,16 +577,6 @@ fn test_claim_before_expiry_should_fail() {
 
     // Try to claim the payment immediately (before expiry) - this should panic
     client.claim_payment(&payment_id, &buyer);
-    
-    // Check that the payment status is still Pending (unchanged)
-    let updated_payment = client.get_a_payment(&payment_id);
-    assert_eq!(updated_payment.status, PaymentStatus::Pending);
-
-    // Verify balances are unchanged
-    let token_client = TokenClient::new(&env, &token_contract_id);
-    assert_eq!(token_client.balance(&buyer), 900);
-    assert_eq!(token_client.balance(&contract_id), 100);
-    assert_eq!(token_client.balance(&seller), 0);
 }
 
 #[test]
@@ -586,7 +665,7 @@ fn test_add_arbitrator_unauthorized() {
     // Try to add arbitrator without authorization
     let unauthorized_address = Address::generate(&env);
     let new_arbitrator = Address::generate(&env);
-    
+
     client.add_arbitrator(&unauthorized_address, &new_arbitrator);
 }
 
@@ -680,7 +759,14 @@ fn test_dispute_after_one_day_for_short_payment() {
     token.mint(&buyer, &1000);
 
     // Create a payment with 3-day expiry
-    let payment_id = client.create_payment(&buyer, &seller, &amount, &token_contract_id, &expiry_days, &description);
+    let payment_id = client.create_payment(
+        &buyer,
+        &seller,
+        &amount,
+        &token_contract_id,
+        &expiry_days,
+        &description,
+    );
 
     // Verify initial status
     let payment = client.get_a_payment(&payment_id);
@@ -735,7 +821,14 @@ fn test_dispute_after_expiry_for_short_payment() {
     token.mint(&buyer, &1000);
 
     // Create a payment with 3-day expiry
-    let payment_id = client.create_payment(&buyer, &seller, &amount, &token_contract_id, &expiry_days, &description);
+    let payment_id = client.create_payment(
+        &buyer,
+        &seller,
+        &amount,
+        &token_contract_id,
+        &expiry_days,
+        &description,
+    );
 
     // Verify initial status
     let payment = client.get_a_payment(&payment_id);
