@@ -91,9 +91,15 @@ impl PaymentEscrowContract {
     /// - The new WASM must be compatible with existing state structure
     /// - All arbitrators must be available to authorize the upgrade
     /// - Upgrade should be thoroughly tested before deployment
-    pub fn upgrade(e: Env, new_wasm_hash: BytesN<32>) {
+    pub fn upgrade(e: Env, new_wasm_hash: BytesN<32>) -> Result<(), PaymentEscrowError> {
         // Retrieve the current list of arbitrators from storage
-        let arbitrators: Vec<Address> = e.storage().persistent().get(&DataKey::Arbitrator).unwrap();
+        let arbitrators: Vec<Address> = e.storage().persistent().get(&DataKey::Arbitrator)
+                   .ok_or(PaymentEscrowError::NotInitialized)?;
+                
+        // Ensure there are arbitrators to authorize the upgrade
+        if arbitrators.is_empty() {
+            return Err(PaymentEscrowError::NotInitialized);
+        }
         
         // Require authorization from all arbitrators (consensus mechanism)
         // This ensures that no single arbitrator can upgrade the contract alone
@@ -102,6 +108,8 @@ impl PaymentEscrowContract {
         // Deploy the new WASM code to the contract
         // This updates the contract's code while preserving all state
         e.deployer().update_current_contract_wasm(new_wasm_hash);
+        
+        Ok(())
     }
 }
 
