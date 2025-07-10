@@ -17,12 +17,25 @@ use soroban_sdk::{
     symbol_short,
     testutils::{Address as _, AuthorizedFunction, AuthorizedInvocation},
     Address, Env, IntoVal, String, Symbol,
+    BytesN
 };
 use soroban_sdk::{
     testutils::Ledger,
-    token::{StellarAssetClient as TokenAdmin, TokenClient},
-    BytesN,
+    token::{StellarAssetClient as TokenAdmin, TokenClient}
 };
+
+
+// FOR CONTRACT UPGRADE TESTING ONLY
+mod new_contract {
+    soroban_sdk::contractimport!(
+        file = "/Users/mac/StarShop-Contracts/target/wasm32-unknown-unknown/release/payment_escrow_contract.wasm"
+    );
+}
+
+fn install_new_wasm(e: &Env) -> BytesN<32> {
+    e.deployer().upload_contract_wasm(new_contract::WASM)
+}
+
 
 
 #[test]
@@ -791,4 +804,79 @@ fn test_dispute_after_expiry_for_short_payment() {
     // Try to dispute the payment after expiry - this should fail
     let dispute_reason = String::from_str(&env, "Item not received as described");
     client.dispute_payment(&payment_id, &buyer, &dispute_reason);
+}
+
+
+#[test]
+fn test_contract_upgrade() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register(PaymentEscrowContract, ());
+    let client = PaymentEscrowContractClient::new(&env, &contract_id);
+
+    // Initialize the contract with an arbitrator
+    let arbitrator = Address::generate(&env);
+    let buyer = Address::generate(&env);
+    let seller = Address::generate(&env);
+    let amount = 100;
+    let expiry_days = 3; // 3-day payment
+    let description = String::from_str(&env, "Test dispute after expiry for short payment");
+ 
+   
+
+    let token_admin = Address::generate(&env);
+    let stellar_asset = env.register_stellar_asset_contract_v2(token_admin.clone());
+    let token_contract_id = stellar_asset.address();
+    let token = TokenAdmin::new(&env, &token_contract_id);
+
+    client.init(&arbitrator);
+
+    // Mint tokens to buyer
+    token.mint(&buyer, &1000);
+
+    // Create a payment with 3-day expiry
+    let payment_id = client.create_payment(
+        &buyer,
+        &seller,
+        &amount,
+        &token_contract_id,
+        &expiry_days,
+        &description,
+    );
+
+    // Verify initial status
+    let payment = client.get_a_payment(&payment_id);
+    assert_eq!(payment.status, PaymentStatus::Pending);
+
+    // Install new WASM and perform upgrade
+    let new_wasm_hash = install_new_wasm(&env);
+    client.upgrade(&new_wasm_hash);
+
+    // Verify the upgrade was authorized correctly
+    assert_eq!(
+        env.auths(),
+        std::vec![(
+            arbitrator,
+            AuthorizedInvocation {
+                function: AuthorizedFunction::Contract((
+                    contract_id.clone(),
+                    symbol_short!("upgrade"),
+                    (new_wasm_hash,).into_val(&env),
+                )),
+                sub_invocations: std::vec![]
+            }
+        )]
+    );
+
+    // Verify the payment status is still Pending (upgrade doesn't change payment status)
+    let updated_payment = client.get_a_payment(&payment_id);
+    assert_eq!(updated_payment.status, PaymentStatus::Pending);
+
+    // Verify funds are still in contract (not transferred)
+    let token_client = TokenClient::new(&env, &token_contract_id);
+    assert_eq!(token_client.balance(&contract_id), amount);
+    assert_eq!(token_client.balance(&buyer), 900);
+    assert_eq!(token_client.balance(&seller), 0); 
+
 }
