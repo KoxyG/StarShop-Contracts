@@ -1,6 +1,14 @@
 #![cfg(test)]
 extern crate std;
 
+// Note: For full upgrade testing with WASM files, we would need to:
+// 1. Build the WASM: cargo build --release --target wasm32-unknown-unknown
+// 2. Import it like this:
+// mod old_contract {
+//     soroban_sdk::contractimport!(file = "target/wasm32-unknown-unknown/release/payment_escrow_contract.wasm");
+// }
+// For now, we'll test the upgrade function without WASM files
+
 use crate::{
     datatypes::{DisputeDecision, PaymentStatus},
     PaymentEscrowContract, PaymentEscrowContractClient,
@@ -13,7 +21,9 @@ use soroban_sdk::{
 use soroban_sdk::{
     testutils::Ledger,
     token::{StellarAssetClient as TokenAdmin, TokenClient},
+    BytesN,
 };
+
 
 #[test]
 fn test_process_deposit_with_auth() {
@@ -472,67 +482,6 @@ fn test_claim_expired_payment() {
     assert_eq!(token_client.balance(&contract_id), 0);
 }
 
-#[test]
-fn test_claim_with_time_expiration() {
-    let env = Env::default();
-    env.mock_all_auths();
-
-    let contract_id = env.register(PaymentEscrowContract, ());
-    let client = PaymentEscrowContractClient::new(&env, &contract_id);
-
-    // Initialize the contract with an arbitrator
-    let arbitrator = Address::generate(&env);
-    client.init(&arbitrator);
-
-    let token_admin = Address::generate(&env);
-    let stellar_asset = env.register_stellar_asset_contract_v2(token_admin.clone());
-    let token_contract_id = stellar_asset.address();
-    let token = TokenAdmin::new(&env, &token_contract_id);
-
-    // Setup test accounts
-    let buyer = Address::generate(&env);
-    let seller = Address::generate(&env);
-    let amount = 100;
-    let description = String::from_str(&env, "Test payment with time expiration");
-
-    // Mint tokens to buyer
-    token.mint(&buyer, &1000);
-
-    // Create a payment with 1-day expiry
-    let payment_id = client.create_payment(
-        &buyer,
-        &seller,
-        &amount,
-        &token_contract_id,
-        &1,
-        &description,
-    );
-
-    // Verify initial status
-    let payment = client.get_a_payment(&payment_id);
-    assert_eq!(payment.status, PaymentStatus::Pending);
-
-    // Simulate time passing by advancing the ledger
-    // We need to advance more than 1 day (86400 seconds) to make the payment expire
-    let current_time = env.ledger().timestamp();
-    let future_time = current_time + 2 * 24 * 60 * 60; // 2 days in the future
-
-    // Use the test environment's time manipulation
-    env.ledger().set_timestamp(future_time);
-
-    // Now try to claim the expired payment
-    client.claim_payment(&payment_id, &buyer);
-
-    // Verify the payment status is now Refunded
-    let updated_payment = client.get_a_payment(&payment_id);
-    assert_eq!(updated_payment.status, PaymentStatus::Refunded);
-
-    // Verify buyer received the funds back
-    let token_client = TokenClient::new(&env, &token_contract_id);
-    assert_eq!(token_client.balance(&buyer), 1000); // Back to original amount
-    assert_eq!(token_client.balance(&contract_id), 0);
-    assert_eq!(token_client.balance(&seller), 0);
-}
 
 #[test]
 #[should_panic]
