@@ -48,8 +48,9 @@ src/
 │   ├── claim.rs        # Payment claim functionality
 │   ├── create.rs       # Payment creation logic
 │   ├── delivery.rs     # Delivery confirmation
+    ├── mod.rs     
 │   └── dispute.rs      # Dispute resolution
-└── storage.rs          # Storage management
+└── 
 ```
 
 ## Usage Examples
