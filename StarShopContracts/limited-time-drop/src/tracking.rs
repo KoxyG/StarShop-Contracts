@@ -65,6 +65,8 @@ impl TrackingManager {
                 .set(&DataKey::DropBuyers(drop_id), &buyers);
         }
 
+        // TrackingManager::record_purchase(env, buyer, drop_id, quantity, price_paid)?;
+
         Ok(())
     }
 
