@@ -33,7 +33,7 @@ pub struct Drop {
 
 /// Status of a drop
 #[contracttype]
-#[derive(Clone, Copy,  PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum DropStatus {
     Pending,   // Drop created but not started
     Active,    // Drop is currently active
@@ -58,6 +58,8 @@ pub enum UserLevel {
     Standard, // Basic access
     Premium,  // Premium features
     Verified, // KYC verified
+    #[cfg(test)]
+    InvalidTest, // Invalid level for testing only
 }
 
 /// Contract error types

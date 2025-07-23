@@ -1,5 +1,5 @@
 use crate::types::{DataKey, Error, PurchaseRecord};
-use soroban_sdk::{Address, Env, Map, Vec,Symbol};
+use soroban_sdk::{Address, Env, Map, Symbol, Vec};
 
 pub struct TrackingManager;
 
