@@ -118,7 +118,7 @@ impl DropManager {
         status: DropStatus,
     ) -> Result<(), Error> {
         // Verify admin authentication and authorization
-        admin.require_auth();
+
         let contract_admin: Address = env
             .storage()
             .instance()
