@@ -3,14 +3,13 @@ extern crate std;
 
 use super::*;
 use soroban_sdk::{
-    testutils::{Address as _, Ledger},
+    testutils::{Address as _, Events, Ledger},
     Address, Env, String,
 };
 
 // Helper: creates a test environment with a set timestamp
 fn test_env() -> Env {
     let env = Env::default();
-    env.mock_all_auths(); // Mock all authorizations to bypass require_auth
     env.ledger().with_mut(|ledger| {
         ledger.timestamp = 1_725_000_000; // Set timestamp
     });
@@ -392,7 +391,7 @@ fn test_zero_supply_drop() {
         let current_time = env.ledger().timestamp();
         let start_time = current_time + 1;
         let end_time = start_time + 1000;
-        let drop_id = LimitedTimeDropContract::create_drop(
+        let res = LimitedTimeDropContract::create_drop(
             env.clone(),
             creator.clone(),
             String::from_str(&env, "Zero Supply"),
@@ -403,22 +402,11 @@ fn test_zero_supply_drop() {
             10,
             1,
             String::from_str(&env, "uri"),
-        )
-        .unwrap();
-
-        LimitedTimeDropContract::update_status(
-            env.clone(),
-            admin.clone(),
-            drop_id,
-            DropStatus::Active,
-        )
-        .unwrap();
-        env.ledger().with_mut(|ledger| {
-            ledger.timestamp = start_time;
-        });
-
-        let res = LimitedTimeDropContract::purchase(env.clone(), buyer.clone(), drop_id, 1);
-        assert!(matches!(res, Err(Error::InsufficientSupply)));
+        );
+        assert!(
+            matches!(res, Err(Error::InsufficientSupply)),
+            "Zero supply should be rejected at creation"
+        );
     });
 }
 
@@ -479,5 +467,618 @@ fn test_participation_tracking() {
         assert_eq!(history.first_unchecked().quantity, 2);
         let buyers = LimitedTimeDropContract::get_buyer_list(env.clone(), drop_id).unwrap();
         assert!(buyers.contains(&buyer));
+    });
+}
+
+#[test]
+fn test_add_to_whitelist_duplicate() {
+    let env = test_env();
+    let admin = Address::generate(&env);
+    let user = Address::generate(&env);
+    let contract_id = deploy_contract(&env);
+    env.as_contract(&contract_id, || {
+        LimitedTimeDropContract::initialize(env.clone(), admin.clone()).unwrap();
+        LimitedTimeDropContract::add_to_whitelist(env.clone(), admin.clone(), user.clone())
+            .unwrap();
+        let res =
+            LimitedTimeDropContract::add_to_whitelist(env.clone(), admin.clone(), user.clone());
+        assert!(matches!(res, Err(Error::DuplicateWhitelistEntry)));
+    });
+}
+
+// Tests for audit scope requirements
+
+#[test]
+fn test_purchase_after_end_time() {
+    let env = test_env();
+    let admin = Address::generate(&env);
+    let buyer = Address::generate(&env);
+    let creator = Address::generate(&env);
+    let contract_id = deploy_contract(&env);
+
+    env.as_contract(&contract_id, || {
+        LimitedTimeDropContract::initialize(env.clone(), admin.clone()).unwrap();
+
+        let current_time = env.ledger().timestamp();
+        let drop_id = LimitedTimeDropContract::create_drop(
+            env.clone(),
+            creator.clone(),
+            String::from_str(&env, "Ended Drop"),
+            3,
+            10,
+            current_time + 100, // Start time in future
+            current_time + 200, // End time after start
+            10,
+            2,
+            String::from_str(&env, "uri"),
+        )
+        .unwrap();
+
+        // Set drop to active first
+        LimitedTimeDropContract::update_status(
+            env.clone(),
+            admin.clone(),
+            drop_id,
+            DropStatus::Active,
+        )
+        .unwrap();
+
+        // Now simulate time passing beyond end time
+        env.ledger().with_mut(|ledger| {
+            ledger.timestamp = current_time + 300; // Past end time
+        });
+
+        LimitedTimeDropContract::add_to_whitelist(env.clone(), admin.clone(), buyer.clone())
+            .unwrap();
+        LimitedTimeDropContract::set_user_level(
+            env.clone(),
+            admin.clone(),
+            buyer.clone(),
+            UserLevel::Premium,
+        )
+        .unwrap();
+
+        let res = LimitedTimeDropContract::purchase(env.clone(), buyer.clone(), drop_id, 1);
+        assert!(
+            matches!(res, Err(Error::DropNotActive)),
+            "Purchase should fail after end time"
+        );
+    });
+}
+
+#[test]
+fn test_purchase_invalid_user_level() {
+    let env = test_env();
+    let admin = Address::generate(&env);
+    let buyer = Address::generate(&env);
+    let creator = Address::generate(&env);
+    let contract_id = deploy_contract(&env);
+
+    env.as_contract(&contract_id, || {
+        LimitedTimeDropContract::initialize(env.clone(), admin.clone()).unwrap();
+
+        let drop_id = LimitedTimeDropContract::create_drop(
+            env.clone(),
+            creator.clone(),
+            String::from_str(&env, "Test Drop"),
+            4,
+            10,
+            1_725_000_100,
+            1_725_001_000,
+            10,
+            2,
+            String::from_str(&env, "uri"),
+        )
+        .unwrap();
+
+        // Add to whitelist but with Standard level (should fail)
+        LimitedTimeDropContract::add_to_whitelist(env.clone(), admin.clone(), buyer.clone())
+            .unwrap();
+        LimitedTimeDropContract::set_user_level(
+            env.clone(),
+            admin.clone(),
+            buyer.clone(),
+            UserLevel::Standard,
+        )
+        .unwrap();
+
+        // Set drop to active
+        LimitedTimeDropContract::update_status(
+            env.clone(),
+            admin.clone(),
+            drop_id,
+            DropStatus::Active,
+        )
+        .unwrap();
+
+        let res = LimitedTimeDropContract::purchase(env.clone(), buyer.clone(), drop_id, 1);
+        assert!(
+            matches!(res, Err(Error::InsufficientLevel)),
+            "Standard users should not be able to purchase"
+        );
+    });
+}
+
+#[test]
+fn test_purchase_not_whitelisted() {
+    let env = test_env();
+    let admin = Address::generate(&env);
+    let buyer = Address::generate(&env);
+    let creator = Address::generate(&env);
+    let contract_id = deploy_contract(&env);
+
+    env.as_contract(&contract_id, || {
+        LimitedTimeDropContract::initialize(env.clone(), admin.clone()).unwrap();
+
+        let drop_id = LimitedTimeDropContract::create_drop(
+            env.clone(),
+            creator.clone(),
+            String::from_str(&env, "Test Drop"),
+            5,
+            10,
+            1_725_000_100,
+            1_725_001_000,
+            10,
+            2,
+            String::from_str(&env, "uri"),
+        )
+        .unwrap();
+
+        // Set user level but don't whitelist
+        LimitedTimeDropContract::set_user_level(
+            env.clone(),
+            admin.clone(),
+            buyer.clone(),
+            UserLevel::Premium,
+        )
+        .unwrap();
+
+        // Set drop to active
+        LimitedTimeDropContract::update_status(
+            env.clone(),
+            admin.clone(),
+            drop_id,
+            DropStatus::Active,
+        )
+        .unwrap();
+
+        let res = LimitedTimeDropContract::purchase(env.clone(), buyer.clone(), drop_id, 1);
+        assert!(
+            matches!(res, Err(Error::NotWhitelisted)),
+            "Non-whitelisted users should not be able to purchase"
+        );
+    });
+}
+
+#[test]
+fn test_double_purchase_exceeds_limit() {
+    let env = test_env();
+    let admin = Address::generate(&env);
+    let buyer = Address::generate(&env);
+    let creator = Address::generate(&env);
+    let contract_id = deploy_contract(&env);
+
+    env.as_contract(&contract_id, || {
+        LimitedTimeDropContract::initialize(env.clone(), admin.clone()).unwrap();
+
+        let drop_id = LimitedTimeDropContract::create_drop(
+            env.clone(),
+            creator.clone(),
+            String::from_str(&env, "Limited Drop"),
+            6,
+            10,
+            1_725_000_100,
+            1_725_001_000,
+            10,
+            2, // per_user_limit = 2
+            String::from_str(&env, "uri"),
+        )
+        .unwrap();
+
+        LimitedTimeDropContract::add_to_whitelist(env.clone(), admin.clone(), buyer.clone())
+            .unwrap();
+        LimitedTimeDropContract::set_user_level(
+            env.clone(),
+            admin.clone(),
+            buyer.clone(),
+            UserLevel::Premium,
+        )
+        .unwrap();
+
+        // Set drop to active
+        LimitedTimeDropContract::update_status(
+            env.clone(),
+            admin.clone(),
+            drop_id,
+            DropStatus::Active,
+        )
+        .unwrap();
+
+        // Advance time to start_time so the drop is active
+        env.ledger().with_mut(|ledger| {
+            ledger.timestamp = 1_725_000_100; // Set to start time
+        });
+
+        // First purchase (1 item)
+        LimitedTimeDropContract::purchase(env.clone(), buyer.clone(), drop_id, 1).unwrap();
+
+        // Second purchase (2 items total would exceed limit of 2)
+        let res = LimitedTimeDropContract::purchase(env.clone(), buyer.clone(), drop_id, 2);
+        assert!(
+            matches!(res, Err(Error::UserLimitExceeded)),
+            "Should not exceed per-user limit"
+        );
+    });
+}
+
+#[test]
+fn test_purchase_cancelled_drop() {
+    let env = test_env();
+    let admin = Address::generate(&env);
+    let buyer = Address::generate(&env);
+    let creator = Address::generate(&env);
+    let contract_id = deploy_contract(&env);
+
+    env.as_contract(&contract_id, || {
+        LimitedTimeDropContract::initialize(env.clone(), admin.clone()).unwrap();
+
+        let drop_id = LimitedTimeDropContract::create_drop(
+            env.clone(),
+            creator.clone(),
+            String::from_str(&env, "Cancelled Drop"),
+            8,
+            10,
+            1_725_000_100,
+            1_725_001_000,
+            10,
+            2,
+            String::from_str(&env, "uri"),
+        )
+        .unwrap();
+
+        LimitedTimeDropContract::add_to_whitelist(env.clone(), admin.clone(), buyer.clone())
+            .unwrap();
+        LimitedTimeDropContract::set_user_level(
+            env.clone(),
+            admin.clone(),
+            buyer.clone(),
+            UserLevel::Premium,
+        )
+        .unwrap();
+
+        // First activate the drop, then cancel it
+        LimitedTimeDropContract::update_status(
+            env.clone(),
+            admin.clone(),
+            drop_id,
+            DropStatus::Active,
+        )
+        .unwrap();
+
+        // Then cancel the drop
+        LimitedTimeDropContract::update_status(
+            env.clone(),
+            admin.clone(),
+            drop_id,
+            DropStatus::Cancelled,
+        )
+        .unwrap();
+
+        let res = LimitedTimeDropContract::purchase(env.clone(), buyer.clone(), drop_id, 1);
+        assert!(
+            matches!(res, Err(Error::DropNotActive)),
+            "Should not purchase from cancelled drop"
+        );
+    });
+}
+
+#[test]
+fn test_event_emission() {
+    let env = test_env();
+    let admin = Address::generate(&env);
+    let buyer = Address::generate(&env);
+    let creator = Address::generate(&env);
+    let contract_id = deploy_contract(&env);
+
+    env.as_contract(&contract_id, || {
+        // Test init event
+        LimitedTimeDropContract::initialize(env.clone(), admin.clone()).unwrap();
+        let init_events = env.events().all();
+        assert!(!init_events.is_empty(), "Init event should be emitted");
+
+        // Test drop_created event
+        let drop_id = LimitedTimeDropContract::create_drop(
+            env.clone(),
+            creator.clone(),
+            String::from_str(&env, "Event Test Drop"),
+            9,
+            10,
+            1_725_000_100,
+            1_725_001_000,
+            10,
+            2,
+            String::from_str(&env, "uri"),
+        )
+        .unwrap();
+
+        let drop_events = env.events().all();
+        assert!(
+            drop_events.len() >= 2,
+            "Drop created event should be emitted"
+        );
+
+        LimitedTimeDropContract::add_to_whitelist(env.clone(), admin.clone(), buyer.clone())
+            .unwrap();
+        LimitedTimeDropContract::set_user_level(
+            env.clone(),
+            admin.clone(),
+            buyer.clone(),
+            UserLevel::Premium,
+        )
+        .unwrap();
+
+        // Set drop to active and test status_update event
+        LimitedTimeDropContract::update_status(
+            env.clone(),
+            admin.clone(),
+            drop_id,
+            DropStatus::Active,
+        )
+        .unwrap();
+
+        let status_events = env.events().all();
+        assert!(
+            status_events.len() >= 3,
+            "Status update event should be emitted"
+        );
+
+        // Advance time to start_time so the drop is active
+        env.ledger().with_mut(|ledger| {
+            ledger.timestamp = 1_725_000_100; // Set to start time
+        });
+
+        // Test purchase event
+        LimitedTimeDropContract::purchase(env.clone(), buyer.clone(), drop_id, 1).unwrap();
+
+        let purchase_events = env.events().all();
+        assert!(
+            purchase_events.len() >= 4,
+            "Purchase event should be emitted"
+        );
+    });
+}
+
+#[test]
+fn test_invalid_status_transition() {
+    let env = test_env();
+    let admin = Address::generate(&env);
+    let creator = Address::generate(&env);
+    let contract_id = deploy_contract(&env);
+
+    env.as_contract(&contract_id, || {
+        LimitedTimeDropContract::initialize(env.clone(), admin.clone()).unwrap();
+
+        let drop_id = LimitedTimeDropContract::create_drop(
+            env.clone(),
+            creator.clone(),
+            String::from_str(&env, "Status Test Drop"),
+            100,
+            10,
+            1_725_000_100,
+            1_725_001_000,
+            10,
+            2,
+            String::from_str(&env, "uri"),
+        )
+        .unwrap();
+
+        // Invalid transition: Pending -> Completed (should go through Active first)
+        let result = LimitedTimeDropContract::update_status(
+            env.clone(),
+            admin.clone(),
+            drop_id,
+            DropStatus::Completed,
+        );
+        assert!(
+            matches!(result, Err(Error::InvalidStatusTransition)),
+            "Should reject Pending -> Completed"
+        );
+
+        // Valid transition: Pending -> Active
+        LimitedTimeDropContract::update_status(
+            env.clone(),
+            admin.clone(),
+            drop_id,
+            DropStatus::Active,
+        )
+        .unwrap();
+
+        // Invalid transition: Active -> Pending
+        let result = LimitedTimeDropContract::update_status(
+            env.clone(),
+            admin.clone(),
+            drop_id,
+            DropStatus::Pending,
+        );
+        assert!(
+            matches!(result, Err(Error::InvalidStatusTransition)),
+            "Should reject Active -> Pending"
+        );
+
+        // Valid transition: Active -> Completed
+        LimitedTimeDropContract::update_status(
+            env.clone(),
+            admin.clone(),
+            drop_id,
+            DropStatus::Completed,
+        )
+        .unwrap();
+    });
+}
+
+#[test]
+fn test_complete_purchase_history() {
+    let env = test_env();
+    let admin = Address::generate(&env);
+    let buyer = Address::generate(&env);
+    let creator = Address::generate(&env);
+    let contract_id = deploy_contract(&env);
+
+    env.as_contract(&contract_id, || {
+        LimitedTimeDropContract::initialize(env.clone(), admin.clone()).unwrap();
+
+        let drop_id = LimitedTimeDropContract::create_drop(
+            env.clone(),
+            creator.clone(),
+            String::from_str(&env, "History Test Drop"),
+            101,
+            10,
+            1_725_000_100,
+            1_725_001_000,
+            10,
+            5,
+            String::from_str(&env, "uri"),
+        )
+        .unwrap();
+
+        LimitedTimeDropContract::add_to_whitelist(env.clone(), admin.clone(), buyer.clone())
+            .unwrap();
+        LimitedTimeDropContract::set_user_level(
+            env.clone(),
+            admin.clone(),
+            buyer.clone(),
+            UserLevel::Premium,
+        )
+        .unwrap();
+
+        // Set drop to active
+        LimitedTimeDropContract::update_status(
+            env.clone(),
+            admin.clone(),
+            drop_id,
+            DropStatus::Active,
+        )
+        .unwrap();
+
+        // Advance time to start_time so the drop is active
+        env.ledger().with_mut(|ledger| {
+            ledger.timestamp = 1_725_000_100; // Set to start time
+        });
+
+        // Make multiple purchases
+        LimitedTimeDropContract::purchase(env.clone(), buyer.clone(), drop_id, 1).unwrap();
+        LimitedTimeDropContract::purchase(env.clone(), buyer.clone(), drop_id, 2).unwrap();
+
+        // Check complete purchase history
+        let history =
+            LimitedTimeDropContract::get_purchase_history(env.clone(), buyer.clone(), drop_id)
+                .unwrap();
+
+        assert_eq!(history.len(), 2, "Should have 2 separate purchase records");
+        assert_eq!(
+            history.get_unchecked(0).quantity,
+            1,
+            "First purchase should be 1"
+        );
+        assert_eq!(
+            history.get_unchecked(1).quantity,
+            2,
+            "Second purchase should be 2"
+        );
+
+        // Verify total user purchases is sum of all
+        let total_purchases =
+            LimitedTimeDropContract::get_drop_purchases(env.clone(), drop_id).unwrap();
+        assert_eq!(total_purchases, 3, "Total purchases should be 3");
+    });
+}
+
+#[test]
+fn test_multiple_drops_purchase_history() {
+    let env = test_env();
+    let admin = Address::generate(&env);
+    let buyer = Address::generate(&env);
+    let creator = Address::generate(&env);
+    let contract_id = deploy_contract(&env);
+
+    env.as_contract(&contract_id, || {
+        LimitedTimeDropContract::initialize(env.clone(), admin.clone()).unwrap();
+
+        // Create two drops
+        let drop_id_1 = LimitedTimeDropContract::create_drop(
+            env.clone(),
+            creator.clone(),
+            String::from_str(&env, "Drop 1"),
+            102,
+            10,
+            1_725_000_100,
+            1_725_001_000,
+            10,
+            3,
+            String::from_str(&env, "uri1"),
+        )
+        .unwrap();
+
+        let drop_id_2 = LimitedTimeDropContract::create_drop(
+            env.clone(),
+            creator.clone(),
+            String::from_str(&env, "Drop 2"),
+            103,
+            10,
+            1_725_000_100,
+            1_725_001_000,
+            20,
+            3,
+            String::from_str(&env, "uri2"),
+        )
+        .unwrap();
+
+        LimitedTimeDropContract::add_to_whitelist(env.clone(), admin.clone(), buyer.clone())
+            .unwrap();
+        LimitedTimeDropContract::set_user_level(
+            env.clone(),
+            admin.clone(),
+            buyer.clone(),
+            UserLevel::Premium,
+        )
+        .unwrap();
+
+        // Set both drops to active
+        LimitedTimeDropContract::update_status(
+            env.clone(),
+            admin.clone(),
+            drop_id_1,
+            DropStatus::Active,
+        )
+        .unwrap();
+        LimitedTimeDropContract::update_status(
+            env.clone(),
+            admin.clone(),
+            drop_id_2,
+            DropStatus::Active,
+        )
+        .unwrap();
+
+        // Advance time to start_time so the drops are active
+        env.ledger().with_mut(|ledger| {
+            ledger.timestamp = 1_725_000_100; // Set to start time
+        });
+
+        // Purchase from both drops
+        LimitedTimeDropContract::purchase(env.clone(), buyer.clone(), drop_id_1, 1).unwrap();
+        LimitedTimeDropContract::purchase(env.clone(), buyer.clone(), drop_id_2, 2).unwrap();
+        LimitedTimeDropContract::purchase(env.clone(), buyer.clone(), drop_id_1, 1).unwrap();
+
+        // Check purchase history for drop 1 only
+        let history_1 =
+            LimitedTimeDropContract::get_purchase_history(env.clone(), buyer.clone(), drop_id_1)
+                .unwrap();
+        assert_eq!(history_1.len(), 2, "Should have 2 purchases for drop 1");
+
+        // Check purchase history for drop 2 only
+        let history_2 =
+            LimitedTimeDropContract::get_purchase_history(env.clone(), buyer.clone(), drop_id_2)
+                .unwrap();
+        assert_eq!(history_2.len(), 1, "Should have 1 purchase for drop 2");
     });
 }
