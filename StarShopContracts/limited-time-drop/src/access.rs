@@ -80,17 +80,11 @@ impl AccessManager {
         level: UserLevel,
     ) -> Result<(), Error> {
         Self::verify_admin(env, admin)?; // Checks this address is the admin
-
-        // Validate user level
-        match level {
-            UserLevel::Standard | UserLevel::Premium | UserLevel::Verified => {
-                env.storage()
-                    .instance()
-                    .set(&DataKey::UserLevels(user.clone()), &level);
-                Ok(())
-            }
-            _ => Err(Error::InvalidUserLevel),
-        }
+                                         // Set user level (all enum variants are valid)
+        env.storage()
+            .instance()
+            .set(&DataKey::UserLevels(user.clone()), &level);
+        Ok(())
     }
 
     /// Get user level
