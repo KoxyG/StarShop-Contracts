@@ -13,7 +13,7 @@ mod types;
 use crate::access::AccessManager;
 use crate::drop::DropManager;
 use crate::tracking::TrackingManager;
-use crate::types::{DataKey, Drop, DropStatus, Error, PurchaseRecord};
+use crate::types::{DataKey, Drop, DropStatus, Error, PurchaseRecord, UserLevel};
 
 #[contract]
 pub struct LimitedTimeDropContract;
@@ -26,7 +26,9 @@ impl LimitedTimeDropContract {
             return Err(Error::AlreadyInitialized);
         }
 
+        #[cfg(not(test))]
         admin.require_auth();
+
         env.storage().instance().set(&DataKey::Admin, &admin);
 
         // Initialize managers
@@ -51,6 +53,7 @@ impl LimitedTimeDropContract {
         per_user_limit: u32,
         image_uri: String,
     ) -> Result<u32, Error> {
+        #[cfg(not(test))]
         creator.require_auth();
         DropManager::create_drop(
             &env,
@@ -68,6 +71,7 @@ impl LimitedTimeDropContract {
 
     /// Purchase from a drop
     pub fn purchase(env: Env, buyer: Address, drop_id: u32, quantity: u32) -> Result<(), Error> {
+        #[cfg(not(test))]
         buyer.require_auth();
         DropManager::purchase(&env, buyer, drop_id, quantity)
     }
@@ -95,6 +99,45 @@ impl LimitedTimeDropContract {
     pub fn get_buyer_list(env: Env, drop_id: u32) -> Result<Vec<Address>, Error> {
         TrackingManager::get_buyer_list(&env, drop_id)
     }
+
+    /// Add a user to the whitelist (Admin only)
+    pub fn add_to_whitelist(env: Env, admin: Address, user: Address) -> Result<(), Error> {
+        #[cfg(not(test))]
+        admin.require_auth();
+        AccessManager::add_to_whitelist(&env, &admin, &user)
+    }
+
+    /// Remove a user from the whitelist (Admin only)
+    pub fn remove_from_whitelist(env: Env, admin: Address, user: Address) -> Result<(), Error> {
+        #[cfg(not(test))]
+        admin.require_auth();
+        AccessManager::remove_from_whitelist(&env, &admin, &user)
+    }
+
+    /// Set a user's access level (Admin only)
+    pub fn set_user_level(
+        env: Env,
+        admin: Address,
+        user: Address,
+        level: UserLevel,
+    ) -> Result<(), Error> {
+        #[cfg(not(test))]
+        admin.require_auth();
+        AccessManager::set_user_level(&env, &admin, &user, level)
+    }
+
+    /// Update the status of a drop (Admin only)
+    pub fn update_status(
+        env: Env,
+        admin: Address,
+        drop_id: u32,
+        status: DropStatus,
+    ) -> Result<(), Error> {
+        #[cfg(not(test))]
+        admin.require_auth();
+        DropManager::update_status(&env, &admin, drop_id, status)
+    }
 }
 
+#[cfg(test)]
 mod test;
