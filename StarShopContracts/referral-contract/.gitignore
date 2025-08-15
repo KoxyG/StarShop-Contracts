@@ -1,0 +1,28 @@
+# Test snapshots (generated files)
+test_snapshots/
+**/test_snapshots/
+
+# Build artifacts
+target/
+**/target/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Environment files
+.env
+.env.local
+
+# Temporary files
+*.tmp
+*.temp
