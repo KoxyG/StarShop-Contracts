@@ -302,3 +302,5 @@ impl ReferralContract {
 
 #[cfg(test)]
 mod test;
+#[cfg(test)]
+mod break_test;
